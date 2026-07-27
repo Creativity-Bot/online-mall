@@ -1,0 +1,56 @@
+# 开发环境（与 docker-compose.yml 共用同一套 mysql / 网络；仅 app 为热重载）
+# 用法: docker compose -f docker-compose.dev.yml up --build
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: onlinemall
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 初始化业务表（上级目录的 schema.sql）
+      - ../schema.sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    restart: unless-stopped
+    networks:
+      - default
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: onlinemall-app
+    ports:
+      - "8080:8080"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: onlinemall
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+      # 指向另一组 Compose 里 Temporal 的「服务名:端口」
+      TEMPORAL_TARGET: temporal:7233
+      SPRING_DEVTOOLS_RESTART_LOG_LEVEL: debug
+    volumes:
+      # 源码挂载：宿主机改代码即可触发重编译
+      - ./src:/app/src
+      - ./pom.xml:/app/pom.xml
+      # 缓存 Maven 依赖
+      - m2_cache:/root/.m2
+    depends_on:
+      - mysql
+    restart: "no"
+    networks:
+      - default
+      - temporal-network
+
+volumes:
+  mysql_data:
+  m2_cache:
+
+networks:
+  temporal-network:
+    external: true
+    name: temporal-network

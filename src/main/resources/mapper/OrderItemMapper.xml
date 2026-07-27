@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.onlinemall.dao.OrderItemDao">
+
+    <resultMap id="BaseResultMap" type="com.example.onlinemall.entity.OrderItem">
+        <id property="orderItemId" column="order_item_id"/>
+        <result property="shopId" column="shop_id"/>
+        <result property="orderNumber" column="order_number"/>
+        <result property="prodId" column="prod_id"/>
+        <result property="skuId" column="sku_id"/>
+        <result property="prodCount" column="prod_count"/>
+        <result property="prodName" column="prod_name"/>
+        <result property="skuName" column="sku_name"/>
+        <result property="pic" column="pic"/>
+        <result property="price" column="price"/>
+        <result property="totalAmount" column="total_amount"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        order_item_id, shop_id, order_number, prod_id, sku_id, prod_count, prod_name, sku_name, pic, price, total_amount, create_time
+    </sql>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM order_item
+        WHERE order_item_id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM order_item
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="orderItemId" keyColumn="order_item_id">
+        INSERT INTO order_item (shop_id, order_number, prod_id, sku_id, prod_count, prod_name, sku_name, pic, price, total_amount, create_time)
+        VALUES (#{shopId}, #{orderNumber}, #{prodId}, #{skuId}, #{prodCount}, #{prodName}, #{skuName}, #{pic}, #{price}, #{totalAmount}, #{createTime})
+    </insert>
+
+    <update id="updateById">
+        UPDATE order_item
+        SET
+            shop_id = #{shopId},
+            order_number = #{orderNumber},
+            prod_id = #{prodId},
+            sku_id = #{skuId},
+            prod_count = #{prodCount},
+            prod_name = #{prodName},
+            sku_name = #{skuName},
+            pic = #{pic},
+            price = #{price},
+            total_amount = #{totalAmount},
+            create_time = #{createTime}
+        WHERE order_item_id = #{orderItemId}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM order_item
+        WHERE order_item_id = #{id}
+    </delete>
+</mapper>

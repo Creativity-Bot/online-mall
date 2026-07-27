@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.onlinemall.dao.ProdPropValueDao">
+
+    <resultMap id="BaseResultMap" type="com.example.onlinemall.entity.ProdPropValue">
+        <id property="valueId" column="value_id"/>
+        <result property="propValue" column="prop_value"/>
+        <result property="propId" column="prop_id"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        value_id, prop_value, prop_id
+    </sql>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM prod_prop_value
+        WHERE value_id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM prod_prop_value
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="valueId" keyColumn="value_id">
+        INSERT INTO prod_prop_value (prop_value, prop_id)
+        VALUES (#{propValue}, #{propId})
+    </insert>
+
+    <update id="updateById">
+        UPDATE prod_prop_value
+        SET
+            prop_value = #{propValue},
+            prop_id = #{propId}
+        WHERE value_id = #{valueId}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM prod_prop_value
+        WHERE value_id = #{id}
+    </delete>
+</mapper>

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.onlinemall.dao.SkuStockDao">
+
+    <resultMap id="BaseResultMap" type="com.example.onlinemall.entity.SkuStock">
+        <id property="id" column="id"/>
+        <result property="skuId" column="sku_id"/>
+        <result property="reservedStocks" column="reserved_stocks"/>
+        <result property="availableStocks" column="available_stocks"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, sku_id, reserved_stocks, available_stocks, create_time, update_time
+    </sql>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM sku_stock
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM sku_stock
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO sku_stock (sku_id, reserved_stocks, available_stocks, create_time, update_time)
+        VALUES (#{skuId}, #{reservedStocks}, #{availableStocks}, #{createTime}, #{updateTime})
+    </insert>
+
+    <update id="updateById">
+        UPDATE sku_stock
+        SET
+            sku_id = #{skuId},
+            reserved_stocks = #{reservedStocks},
+            available_stocks = #{availableStocks},
+            create_time = #{createTime},
+            update_time = #{updateTime}
+        WHERE id = #{id}
+    </update>
+
+    <update id="reserveStock">
+        UPDATE sku_stock
+        SET available_stocks = available_stocks - #{qty},
+            reserved_stocks = reserved_stocks + #{qty},
+            update_time = #{updateTime}
+        WHERE sku_id = #{skuId}
+          AND available_stocks >= #{qty}
+    </update>
+
+    <update id="releaseStock">
+        UPDATE sku_stock
+        SET available_stocks = available_stocks + #{qty},
+            reserved_stocks = reserved_stocks - #{qty},
+            update_time = #{updateTime}
+        WHERE sku_id = #{skuId}
+          AND reserved_stocks >= #{qty}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM sku_stock
+        WHERE id = #{id}
+    </delete>
+</mapper>

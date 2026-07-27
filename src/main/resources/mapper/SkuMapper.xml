@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.onlinemall.dao.SkuDao">
+
+    <resultMap id="BaseResultMap" type="com.example.onlinemall.entity.Sku">
+        <id property="skuId" column="sku_id"/>
+        <result property="prodId" column="prod_id"/>
+        <result property="skuCode" column="sku_code"/>
+        <result property="properties" column="properties"/>
+        <result property="originalPrice" column="original_price"/>
+        <result property="currentPrice" column="current_price"/>
+        <result property="modelId" column="model_id"/>
+        <result property="pic" column="pic"/>
+        <result property="skuName" column="sku_name"/>
+        <result property="weight" column="weight"/>
+        <result property="volume" column="volume"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        sku_id, prod_id, sku_code, properties, original_price, current_price, model_id, pic, sku_name, weight, volume, status, create_time, update_time
+    </sql>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM sku
+        WHERE sku_id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM sku
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="skuId" keyColumn="sku_id">
+        INSERT INTO sku (prod_id, sku_code, properties, original_price, current_price, model_id, pic, sku_name, weight, volume, status, create_time, update_time)
+        VALUES (#{prodId}, #{skuCode}, #{properties}, #{originalPrice}, #{currentPrice}, #{modelId}, #{pic}, #{skuName}, #{weight}, #{volume}, #{status}, #{createTime}, #{updateTime})
+    </insert>
+
+    <update id="updateById">
+        UPDATE sku
+        SET
+            prod_id = #{prodId},
+            sku_code = #{skuCode},
+            properties = #{properties},
+            original_price = #{originalPrice},
+            current_price = #{currentPrice},
+            model_id = #{modelId},
+            pic = #{pic},
+            sku_name = #{skuName},
+            weight = #{weight},
+            volume = #{volume},
+            status = #{status},
+            create_time = #{createTime},
+            update_time = #{updateTime}
+        WHERE sku_id = #{skuId}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM sku
+        WHERE sku_id = #{id}
+    </delete>
+</mapper>

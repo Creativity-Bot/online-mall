@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.onlinemall.dao.ProdCommDao">
+
+    <resultMap id="BaseResultMap" type="com.example.onlinemall.entity.ProdComm">
+        <id property="prodCommId" column="prod_comm_id"/>
+        <result property="prodId" column="prod_id"/>
+        <result property="prodName" column="prod_name"/>
+        <result property="orderItemId" column="order_item_id"/>
+        <result property="customerId" column="customer_id"/>
+        <result property="content" column="content"/>
+        <result property="replyContent" column="reply_content"/>
+        <result property="createTime" column="create_time"/>
+        <result property="replyTime" column="reply_time"/>
+        <result property="replySts" column="reply_sts"/>
+        <result property="postip" column="postip"/>
+        <result property="score" column="score"/>
+        <result property="usefulCounts" column="useful_counts"/>
+        <result property="pics" column="pics"/>
+        <result property="isAnonymous" column="is_anonymous"/>
+        <result property="status" column="status"/>
+        <result property="evaluate" column="evaluate"/>
+        <result property="shopId" column="shop_id"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        prod_comm_id, prod_id, prod_name, order_item_id, customer_id, content, reply_content, create_time, reply_time, reply_sts, postip, score, useful_counts, pics, is_anonymous, status, evaluate, shop_id
+    </sql>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM prod_comm
+        WHERE prod_comm_id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM prod_comm
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="prodCommId" keyColumn="prod_comm_id">
+        INSERT INTO prod_comm (prod_id, prod_name, order_item_id, customer_id, content, reply_content, create_time, reply_time, reply_sts, postip, score, useful_counts, pics, is_anonymous, status, evaluate, shop_id)
+        VALUES (#{prodId}, #{prodName}, #{orderItemId}, #{customerId}, #{content}, #{replyContent}, #{createTime}, #{replyTime}, #{replySts}, #{postip}, #{score}, #{usefulCounts}, #{pics}, #{isAnonymous}, #{status}, #{evaluate}, #{shopId})
+    </insert>
+
+    <update id="updateById">
+        UPDATE prod_comm
+        SET
+            prod_id = #{prodId},
+            prod_name = #{prodName},
+            order_item_id = #{orderItemId},
+            customer_id = #{customerId},
+            content = #{content},
+            reply_content = #{replyContent},
+            create_time = #{createTime},
+            reply_time = #{replyTime},
+            reply_sts = #{replySts},
+            postip = #{postip},
+            score = #{score},
+            useful_counts = #{usefulCounts},
+            pics = #{pics},
+            is_anonymous = #{isAnonymous},
+            status = #{status},
+            evaluate = #{evaluate},
+            shop_id = #{shopId}
+        WHERE prod_comm_id = #{prodCommId}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM prod_comm
+        WHERE prod_comm_id = #{id}
+    </delete>
+</mapper>

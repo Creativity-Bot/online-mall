@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.onlinemall.dao.ProdTagReferenceDao">
+
+    <resultMap id="BaseResultMap" type="com.example.onlinemall.entity.ProdTagReference">
+        <id property="referenceId" column="reference_id"/>
+        <result property="shopId" column="shop_id"/>
+        <result property="tagId" column="tag_id"/>
+        <result property="prodId" column="prod_id"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        reference_id, shop_id, tag_id, prod_id, status, create_time
+    </sql>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM prod_tag_reference
+        WHERE reference_id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM prod_tag_reference
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="referenceId" keyColumn="reference_id">
+        INSERT INTO prod_tag_reference (shop_id, tag_id, prod_id, status, create_time)
+        VALUES (#{shopId}, #{tagId}, #{prodId}, #{status}, #{createTime})
+    </insert>
+
+    <update id="updateById">
+        UPDATE prod_tag_reference
+        SET
+            shop_id = #{shopId},
+            tag_id = #{tagId},
+            prod_id = #{prodId},
+            status = #{status},
+            create_time = #{createTime}
+        WHERE reference_id = #{referenceId}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM prod_tag_reference
+        WHERE reference_id = #{id}
+    </delete>
+</mapper>

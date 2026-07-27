@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.onlinemall.dao.BasketDao">
+
+    <resultMap id="BaseResultMap" type="Basket">
+        <id property="basketId" column="basket_id"/>
+        <result property="prodId" column="prod_id"/>
+        <result property="shopId" column="shop_id"/>
+        <result property="skuId" column="sku_id"/>
+        <result property="customerId" column="customer_id"/>
+        <result property="prodCount" column="prod_count"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        basket_id, prod_id, shop_id, sku_id, customer_id, prod_count, create_time, update_time
+    </sql>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM basket
+        WHERE basket_id = #{id}
+    </select>
+
+    <select id="selectByCustomerId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM basket
+        WHERE customer_id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM basket
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="basketId" keyColumn="basket_id">
+        INSERT INTO basket (prod_id, shop_id, sku_id, customer_id, prod_count, create_time, update_time)
+        VALUES (#{prodId}, #{shopId}, #{skuId}, #{customerId}, #{prodCount}, #{createTime}, #{updateTime})
+    </insert>
+
+    <update id="updateById">
+        UPDATE basket
+        SET
+            prod_id = #{prodId},
+            shop_id = #{shopId},
+            sku_id = #{skuId},
+            customer_id = #{customerId},
+            prod_count = #{prodCount},
+            create_time = #{createTime},
+            update_time = #{updateTime}
+        WHERE basket_id = #{basketId}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM basket
+        WHERE basket_id = #{id}
+    </delete>
+</mapper>

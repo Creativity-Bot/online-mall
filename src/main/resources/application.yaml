@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: onlinemall
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:onlinemall}?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  temporal:
+    connection:
+      target: ${TEMPORAL_TARGET:127.0.0.1:7233}
+    namespace: default
+    workers:
+      - name: order-service-worker
+        task-queue: order_service
+    workers-auto-discovery:
+      packages:
+        - com.example.onlinemall.activities
+        - com.example.onlinemall.workflow
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.example.onlinemall.entity
+  alias-package: com.example.onlinemall.entity
+  configuration:
+    map-underscore-to-camel-case: true

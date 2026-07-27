@@ -1,0 +1,16 @@
+# 开发镜像：Maven + spring-boot:run + DevTools 热重载
+FROM maven:3.9-eclipse-temurin-21
+WORKDIR /app
+
+COPY pom.xml .
+COPY scripts/dev-entrypoint.sh /usr/local/bin/dev-entrypoint.sh
+# Windows 检出可能带 CRLF，先去掉再赋权
+RUN sed -i 's/\r$//' /usr/local/bin/dev-entrypoint.sh \
+    && chmod +x /usr/local/bin/dev-entrypoint.sh \
+    && mvn -B -DskipTests dependency:resolve || true
+
+# 首次构建用；运行时由 compose 挂载宿主机 src 覆盖
+COPY src ./src
+
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/dev-entrypoint.sh"]

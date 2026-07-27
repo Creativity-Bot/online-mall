@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.onlinemall.dao.OrderSettlementDao">
+
+    <resultMap id="BaseResultMap" type="com.example.onlinemall.entity.OrderSettlement">
+        <id property="settlementId" column="settlement_id"/>
+        <result property="orderNumber" column="order_number"/>
+        <result property="merchantTradeNo" column="merchant_trade_no"/>
+        <result property="bizPayNo" column="biz_pay_no"/>
+        <result property="payType" column="pay_type"/>
+        <result property="channel" column="channel"/>
+        <result property="payAmount" column="pay_amount"/>
+        <result property="payStatus" column="pay_status"/>
+        <result property="isClearing" column="is_clearing"/>
+        <result property="paidAt" column="paid_at"/>
+        <result property="clearingTime" column="clearing_time"/>
+        <result property="rawNotify" column="raw_notify"/>
+        <result property="version" column="version"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        settlement_id, order_number, merchant_trade_no, biz_pay_no, pay_type, channel, pay_amount, pay_status, is_clearing, paid_at, clearing_time, raw_notify, version, create_time, update_time
+    </sql>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM order_settlement
+        WHERE settlement_id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM order_settlement
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="settlementId" keyColumn="settlement_id">
+        INSERT INTO order_settlement (order_number, merchant_trade_no, biz_pay_no, pay_type, channel, pay_amount, pay_status, is_clearing, paid_at, clearing_time, raw_notify, version, create_time, update_time)
+        VALUES (#{orderNumber}, #{merchantTradeNo}, #{bizPayNo}, #{payType}, #{channel}, #{payAmount}, #{payStatus}, #{isClearing}, #{paidAt}, #{clearingTime}, #{rawNotify}, #{version}, #{createTime}, #{updateTime})
+    </insert>
+
+    <update id="updateById">
+        UPDATE order_settlement
+        SET
+            order_number = #{orderNumber},
+            merchant_trade_no = #{merchantTradeNo},
+            biz_pay_no = #{bizPayNo},
+            pay_type = #{payType},
+            channel = #{channel},
+            pay_amount = #{payAmount},
+            pay_status = #{payStatus},
+            is_clearing = #{isClearing},
+            paid_at = #{paidAt},
+            clearing_time = #{clearingTime},
+            raw_notify = #{rawNotify},
+            version = #{version},
+            create_time = #{createTime},
+            update_time = #{updateTime}
+        WHERE settlement_id = #{settlementId}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM order_settlement
+        WHERE settlement_id = #{id}
+    </delete>
+</mapper>
