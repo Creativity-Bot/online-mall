@@ -10,4 +10,6 @@ public interface OrderStatus {
 
     /** 待付款 */
     int WAIT_PAY = 1;
+
+    int WAIT_TO_PACKAGE = 2;
 }

@@ -114,8 +114,29 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
     }
 
     @Override
+    @Transactional
     public void markOrderPaid(String orderId) {
         log.info("markOrderPaid orderId={}", orderId);
+        if (!StringUtils.hasText(orderId)) {
+            throw ApplicationFailure.newNonRetryableFailure("orderId is required", "InvalidOrderId");
+        }
+
+        // 1. 幂等：不存在则直接返回
+        Order existing = orderDao.selectByOrderNumber(orderId);
+        if (existing.getStatus() != null && existing.getStatus() == OrderStatus.WAIT_TO_PACKAGE) {
+            log.info("markOrderPaid already paid, skip. orderNumber={}", orderId);
+            return;
+        }
+
+        // 2. 未支付则更新为已支付
+        LocalDateTime now = LocalDateTime.now();
+        int updated = orderDao.markWaitToPackByOrderNumber(orderId, OrderStatus.WAIT_TO_PACKAGE, now);
+        if(updated == 0){
+            throw ApplicationFailure.newFailure(
+                    "update order failed, orderNumber=" + orderId,
+                    "OrderUpdateFailed");
+        }
+        log.info("markOrderPaid done. orderNumber={} updated={}", orderId, updated);
     }
 
     @Override
@@ -136,6 +157,11 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
         // 2. 未取消则更新为已取消
         LocalDateTime now = LocalDateTime.now();
         int updated = orderDao.markCancelledByOrderNumber(orderId, OrderStatus.CANCELLED, now);
+        if(updated == 0){
+            throw ApplicationFailure.newFailure(
+                    "update order failed, orderNumber=" + orderId,
+                    "OrderUpdateFailed");
+        }
         log.info("markOrderCancelled done. orderNumber={} updated={}", orderId, updated);
     }
 }

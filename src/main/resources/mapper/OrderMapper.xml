@@ -99,6 +99,15 @@
           AND status != #{status}
     </update>
 
+    <update id="markWaitToPackByOrderNumber">
+        UPDATE orders
+        SET status = #{status},
+        pay_time = #{payTime},
+        update_time = #{payTime}
+        WHERE order_number = #{orderNumber}
+        AND status != #{status}
+    </update>
+
     <delete id="deleteById">
         DELETE FROM orders
         WHERE order_id = #{id}

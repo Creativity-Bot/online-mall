@@ -99,6 +99,9 @@ public class ReserveStockActivitiesImpl implements ReserveStockActivities {
     @Override
     public void confirmStock(String orderId) {
         log.info("confirmStock orderId={}", orderId);
+        // 1. 幂等
+        // 2. 修改
+        // 3. rabbitmq发送异步消息去更新prod的库存
     }
 
     @Override
