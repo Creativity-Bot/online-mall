@@ -3,10 +3,7 @@ package com.example.onlinemall.workflow.impl;
 import com.example.onlinemall.activities.CreateOrderActivities;
 import com.example.onlinemall.activities.PaymentActivities;
 import com.example.onlinemall.activities.ReserveStockActivities;
-import com.example.onlinemall.model.checkout.CheckoutRequest;
-import com.example.onlinemall.model.checkout.OrderCheckoutResult;
-import com.example.onlinemall.model.checkout.PayInfo;
-import com.example.onlinemall.model.checkout.PaymentCallback;
+import com.example.onlinemall.model.checkout.*;
 import com.example.onlinemall.workflow.OrderCheckoutWorkflow;
 import io.temporal.activity.ActivityOptions;
 import io.temporal.common.RetryOptions;
@@ -32,6 +29,19 @@ public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
                                     .build())
                     .build();
 
+    /** 支付成功后：只向前重试，不回滚；maximumAttempts=0 表示无限重试 */
+    private static final ActivityOptions POST_PAYMENT_OPTIONS =
+            ActivityOptions.newBuilder()
+                    .setStartToCloseTimeout(Duration.ofSeconds(15))
+                    .setRetryOptions(
+                            RetryOptions.newBuilder()
+                                    .setInitialInterval(Duration.ofSeconds(1))
+                                    .setBackoffCoefficient(2.0)
+                                    .setMaximumInterval(Duration.ofMinutes(1))
+                                    .setMaximumAttempts(0)
+                                    .build())
+                    .build();
+
     private final CreateOrderActivities orderActivities =
             Workflow.newActivityStub(CreateOrderActivities.class, DEFAULT_OPTIONS);
 
@@ -40,6 +50,12 @@ public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
 
     private final PaymentActivities paymentActivities =
             Workflow.newActivityStub(PaymentActivities.class, DEFAULT_OPTIONS);
+
+    private final CreateOrderActivities postPaymentOrderActivities =
+            Workflow.newActivityStub(CreateOrderActivities.class, POST_PAYMENT_OPTIONS);
+
+    private final ReserveStockActivities postPaymentStockActivities =
+            Workflow.newActivityStub(ReserveStockActivities.class, POST_PAYMENT_OPTIONS);
 
     private boolean initDone = false;
     private Exception initError;
@@ -51,14 +67,16 @@ public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
     @Override
     public OrderCheckoutResult run(CheckoutRequest request) {
         Saga saga = new Saga(new Saga.Options.Builder().setParallelCompensation(false).build());
+        StockChange stockChange = buildStockChange(request);
 
         // ---- 阶段 A：尽快让前端可支付 ----
         try {
+            // 因为用了redis，所以可以先建单
             orderActivities.createOrder(request);
             saga.addCompensation(orderActivities::markOrderCancelled, request.getOrderId());
 
-            stockActivities.reserveStock(request);
-            saga.addCompensation(stockActivities::releaseStock, request.getOrderId());
+            stockActivities.reserveStock(stockChange);
+            saga.addCompensation(stockActivities::releaseStock, stockChange);
 
             payInfo = paymentActivities.createPayment(request);
             saga.addCompensation(paymentActivities::cancelPayment, request.getOrderId());
@@ -81,10 +99,36 @@ public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
             return new OrderCheckoutResult(request.getOrderId(), "CANCELLED", "payment timeout or failed");
         }
 
-        orderActivities.markOrderPaid(request.getOrderId());
-        stockActivities.confirmStock(request.getOrderId());
-        orderActivities.clearCart(request.getCustomerId());
+        // 已付款：只向前恢复，失败则一直重试，不做 Saga 补偿
+        postPaymentOrderActivities.markOrderPaid(request.getOrderId());
+        postPaymentStockActivities.confirmStock(stockChange);
+        postPaymentOrderActivities.clearCart(request.getCustomerId());
         return new OrderCheckoutResult(request.getOrderId(), "PAID", "ok");
+    }
+
+    private StockChange buildStockChange(CheckoutRequest request) {
+        StockChange stockChange = new StockChange();
+        stockChange.setOrderId(request.getOrderId());
+
+        request.getItems().forEach(shop -> {
+            if (shop.getProductItemList() == null) {
+                return;
+            }
+            shop.getProductItemList().forEach(productItem -> {
+                stockChange.addSku(Sku.builder()
+                        .skuId(productItem.getSkuId())
+                        .quantity(productItem.getQuantity())
+                        .build());
+
+                stockChange.addOrMergeSpu(Spu.builder()
+                        .prodId(productItem.getProdId())
+                        .quantity(productItem.getQuantity())
+                        .build());
+            });
+        });
+
+        stockChange.sort();
+        return stockChange;
     }
 
     @Override

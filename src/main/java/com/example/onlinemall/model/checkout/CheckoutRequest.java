@@ -16,6 +16,6 @@ public class CheckoutRequest {
     private String orderId;
     private String customerId;
     /** 下单瞬间的购物车快照，避免流程中途购物车被改 */
-    private List<CartItemSnapshot> items = new ArrayList<>();
+    private List<Shop> items = new ArrayList<>();
     private BigDecimal totalAmount;
 }

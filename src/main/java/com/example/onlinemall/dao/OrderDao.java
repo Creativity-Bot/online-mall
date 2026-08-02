@@ -27,7 +27,13 @@ public interface OrderDao {
 
     int deleteById(@Param("id") Long id);
 
-    int markWaitToPackByOrderNumber(@Param("orderNumber")String orderId,
-                                    @Param("status") int status,
-                                    @Param("payTime") LocalDateTime now);
+    int markPaidByOrderNumber(@Param("orderNumber")String orderId,
+                              @Param("status") int status,
+                              @Param("payTime") LocalDateTime now);
+
+    /** CAS 更新库存状态：仅当当前为 fromStatus 时改为 toStatus */
+    int casStockStatus(@Param("orderNumber") String orderNumber,
+                       @Param("fromStatus") int fromStatus,
+                       @Param("toStatus") int toStatus,
+                       @Param("updateTime") LocalDateTime updateTime);
 }

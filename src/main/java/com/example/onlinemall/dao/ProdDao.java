@@ -17,5 +17,12 @@ public interface ProdDao {
 
     int updateById(Prod entity);
 
+    /**
+     * 支付确认后扣减商品总库存并增加销量；库存不足时更新行数为 0。
+     */
+    int deductStock(@Param("prodId") Long prodId,
+                    @Param("qty") Integer qty,
+                    @Param("updateTime") java.time.LocalDateTime updateTime);
+
     int deleteById(@Param("id") Long id);
 }

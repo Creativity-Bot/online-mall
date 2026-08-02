@@ -31,5 +31,12 @@ public interface SkuStockDao {
                      @Param("qty") Integer qty,
                      @Param("updateTime") java.time.LocalDateTime updateTime);
 
+    /**
+     * 原子确认扣减：reserved 减少（不归还 available）；预占不足时更新行数为 0。
+     */
+    int confirmStock(@Param("skuId") Long skuId,
+                     @Param("qty") Integer qty,
+                     @Param("updateTime") java.time.LocalDateTime updateTime);
+
     int deleteById(@Param("id") Long id);
 }

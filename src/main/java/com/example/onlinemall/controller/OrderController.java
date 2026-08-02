@@ -2,9 +2,7 @@ package com.example.onlinemall.controller;
 
 import com.example.onlinemall.entity.Order;
 import com.example.onlinemall.model.ResponseTemplate;
-import com.example.onlinemall.model.checkout.CheckoutRequest;
-import com.example.onlinemall.model.checkout.PayInfo;
-import com.example.onlinemall.model.checkout.PaymentCallback;
+import com.example.onlinemall.model.checkout.*;
 import com.example.onlinemall.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;

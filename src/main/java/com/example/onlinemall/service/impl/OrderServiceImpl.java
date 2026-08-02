@@ -3,9 +3,7 @@ package com.example.onlinemall.service.impl;
 import com.example.onlinemall.constant.SharedConstants;
 import com.example.onlinemall.dao.OrderDao;
 import com.example.onlinemall.entity.Order;
-import com.example.onlinemall.model.checkout.CheckoutRequest;
-import com.example.onlinemall.model.checkout.PayInfo;
-import com.example.onlinemall.model.checkout.PaymentCallback;
+import com.example.onlinemall.model.checkout.*;
 import com.example.onlinemall.service.OrderService;
 import com.example.onlinemall.workflow.OrderCheckoutWorkflow;
 import io.temporal.api.enums.v1.WorkflowIdConflictPolicy;
@@ -17,8 +15,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.List;
-import java.util.UUID;
+import java.math.BigDecimal;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class OrderServiceImpl implements OrderService {
@@ -56,6 +55,7 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public PayInfo checkout(CheckoutRequest request) {
+        
         if (!StringUtils.hasText(request.getOrderId())) {
             request.setOrderId(UUID.randomUUID().toString().replace("-", ""));
         }

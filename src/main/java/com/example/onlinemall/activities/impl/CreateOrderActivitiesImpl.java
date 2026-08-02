@@ -2,12 +2,14 @@ package com.example.onlinemall.activities.impl;
 
 import com.example.onlinemall.activities.CreateOrderActivities;
 import com.example.onlinemall.constant.OrderStatus;
+import com.example.onlinemall.constant.StockStatus;
 import com.example.onlinemall.dao.OrderDao;
 import com.example.onlinemall.dao.OrderItemDao;
 import com.example.onlinemall.entity.Order;
 import com.example.onlinemall.entity.OrderItem;
-import com.example.onlinemall.model.checkout.CartItemSnapshot;
 import com.example.onlinemall.model.checkout.CheckoutRequest;
+import com.example.onlinemall.model.checkout.ProductItem;
+import com.example.onlinemall.model.checkout.Shop;
 import io.temporal.failure.ApplicationFailure;
 import io.temporal.spring.boot.ActivityImpl;
 import org.slf4j.Logger;
@@ -61,6 +63,8 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
         // 2. 创建订单 + 订单项，status=1 待付款
         LocalDateTime now = LocalDateTime.now();
         int productNums = request.getItems().stream()
+                .filter(shop -> shop.getProductItemList() != null)
+                .flatMap(shop -> shop.getProductItemList().stream())
                 .mapToInt(item -> item.getQuantity() == null ? 0 : item.getQuantity())
                 .sum();
 
@@ -69,6 +73,7 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
                 .orderNumber(request.getOrderId())
                 .totalAmount(request.getTotalAmount())
                 .status(OrderStatus.WAIT_PAY)
+                .stockStatus(StockStatus.NONE)
                 .productNums(productNums)
                 .isPayed(0)
                 .deleteStatus(0)
@@ -84,26 +89,31 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
         insertOrderItems(request.getOrderId(), request.getItems(), now);
     }
 
-    private void insertOrderItems(String orderNumber, List<CartItemSnapshot> items, LocalDateTime now) {
-        for (CartItemSnapshot item : items) {
-            OrderItem orderItem = new OrderItem();
-            orderItem.setOrderNumber(orderNumber);
-            orderItem.setProdName("mock_data");
-            orderItem.setProdId(item.getProdId());
-            orderItem.setSkuId(item.getSkuId());
-            orderItem.setProdCount(item.getQuantity());
-            orderItem.setPrice(item.getUnitPrice());
-            if (item.getUnitPrice() != null && item.getQuantity() != null) {
-                orderItem.setTotalAmount(
-                        item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
+    private void insertOrderItems(String orderNumber, List<Shop> shops, LocalDateTime now) {
+        for (Shop shop : shops) {
+            if (CollectionUtils.isEmpty(shop.getProductItemList())) {
+                continue;
             }
-            orderItem.setCreateTime(now);
-            int inserted = orderItemDao.insert(orderItem);
-            if (inserted == 0) {
-                throw ApplicationFailure.newFailure(
-                        "insert order_item failed, orderNumber=" + orderNumber
-                                + ", skuId=" + item.getSkuId(),
-                        "OrderItemInsertFailed");
+            for (ProductItem item : shop.getProductItemList()) {
+                OrderItem orderItem = new OrderItem();
+                orderItem.setOrderNumber(orderNumber);
+                orderItem.setProdName("mock_data");
+                orderItem.setProdId(item.getProdId());
+                orderItem.setSkuId(item.getSkuId());
+                orderItem.setProdCount(item.getQuantity());
+                orderItem.setPrice(item.getUnitPrice());
+                if (item.getUnitPrice() != null && item.getQuantity() != null) {
+                    orderItem.setTotalAmount(
+                            item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
+                }
+                orderItem.setCreateTime(now);
+                int inserted = orderItemDao.insert(orderItem);
+                if (inserted == 0) {
+                    throw ApplicationFailure.newFailure(
+                            "insert order_item failed, orderNumber=" + orderNumber
+                                    + ", skuId=" + item.getSkuId(),
+                            "OrderItemInsertFailed");
+                }
             }
         }
     }
@@ -123,14 +133,14 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
 
         // 1. 幂等：不存在则直接返回
         Order existing = orderDao.selectByOrderNumber(orderId);
-        if (existing.getStatus() != null && existing.getStatus() == OrderStatus.WAIT_TO_PACKAGE) {
+        if (existing.getStatus() != null && existing.getStatus() == OrderStatus.PAID) {
             log.info("markOrderPaid already paid, skip. orderNumber={}", orderId);
             return;
         }
 
         // 2. 未支付则更新为已支付
         LocalDateTime now = LocalDateTime.now();
-        int updated = orderDao.markWaitToPackByOrderNumber(orderId, OrderStatus.WAIT_TO_PACKAGE, now);
+        int updated = orderDao.markPaidByOrderNumber(orderId, OrderStatus.PAID, now);
         if(updated == 0){
             throw ApplicationFailure.newFailure(
                     "update order failed, orderNumber=" + orderId,

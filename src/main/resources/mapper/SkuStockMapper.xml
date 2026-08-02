@@ -63,6 +63,14 @@
           AND reserved_stocks >= #{qty}
     </update>
 
+    <update id="confirmStock">
+        UPDATE sku_stock
+        SET reserved_stocks = reserved_stocks - #{qty},
+            update_time = #{updateTime}
+        WHERE sku_id = #{skuId}
+          AND reserved_stocks >= #{qty}
+    </update>
+
     <delete id="deleteById">
         DELETE FROM sku_stock
         WHERE id = #{id}

@@ -69,6 +69,15 @@
         WHERE prod_id = #{prodId}
     </update>
 
+    <update id="deductStock">
+        UPDATE prod
+        SET total_stocks = total_stocks - #{qty},
+            sold_num = sold_num + #{qty},
+            update_time = #{updateTime}
+        WHERE prod_id = #{prodId}
+          AND total_stocks >= #{qty}
+    </update>
+
     <delete id="deleteById">
         DELETE FROM prod
         WHERE prod_id = #{id}

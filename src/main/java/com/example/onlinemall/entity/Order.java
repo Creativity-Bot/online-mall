@@ -20,6 +20,8 @@ public class Order {
     private BigDecimal actualPaid;
     private String remarks;
     private Integer status;
+    /** 库存生命周期：见 {@link com.example.onlinemall.constant.StockStatus} */
+    private Integer stockStatus;
     private String dvyType;
     private Long dvyId;
     private String dvyFlowId;

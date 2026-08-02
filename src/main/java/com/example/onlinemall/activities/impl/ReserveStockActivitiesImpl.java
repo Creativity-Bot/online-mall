@@ -1,11 +1,14 @@
 package com.example.onlinemall.activities.impl;
 
 import com.example.onlinemall.activities.ReserveStockActivities;
+import com.example.onlinemall.constant.StockStatus;
+import com.example.onlinemall.dao.OrderDao;
+import com.example.onlinemall.dao.ProdDao;
 import com.example.onlinemall.dao.SkuStockDao;
-import com.example.onlinemall.dao.StockLedgerDao;
-import com.example.onlinemall.entity.StockLedger;
-import com.example.onlinemall.model.checkout.CartItemSnapshot;
-import com.example.onlinemall.model.checkout.CheckoutRequest;
+import com.example.onlinemall.entity.Order;
+import com.example.onlinemall.model.checkout.Sku;
+import com.example.onlinemall.model.checkout.Spu;
+import com.example.onlinemall.model.checkout.StockChange;
 import io.temporal.failure.ApplicationFailure;
 import io.temporal.spring.boot.ActivityImpl;
 import org.slf4j.Logger;
@@ -17,7 +20,6 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Component
 @ActivityImpl(workers = "order-service-worker")
@@ -25,128 +27,180 @@ public class ReserveStockActivitiesImpl implements ReserveStockActivities {
 
     private static final Logger log = LoggerFactory.getLogger(ReserveStockActivitiesImpl.class);
 
-    /** 预占库存 */
-    private static final int LEDGER_TYPE_RESERVE = 1;
-
-    /** 释放库存 */
-    private static final int LEDGER_TYPE_RELEASE = 0;
-
     @Autowired
-    private StockLedgerDao stockLedgerDao;
+    private OrderDao orderDao;
 
     @Autowired
     private SkuStockDao skuStockDao;
 
-    @Override
-    @Transactional
-    public void reserveStock(CheckoutRequest request) {
-        log.info("reserveStock orderId={}", request.getOrderId());
-
-        if (!StringUtils.hasText(request.getOrderId())) {
-            throw ApplicationFailure.newNonRetryableFailure("orderId is required", "InvalidCheckoutRequest");
-        }
-        if (CollectionUtils.isEmpty(request.getItems())) {
-            throw ApplicationFailure.newNonRetryableFailure("items is empty", "InvalidCheckoutRequest");
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        for (CartItemSnapshot item : request.getItems()) {
-            reserveOneSku(request.getOrderId(), item, now);
-        }
-    }
-
-    private void reserveOneSku(String orderNumber, CartItemSnapshot item, LocalDateTime now) {
-        if (item.getSkuId() == null) {
-            throw ApplicationFailure.newNonRetryableFailure("skuId is required", "InvalidCheckoutRequest");
-        }
-        if (item.getQuantity() == null || item.getQuantity() <= 0) {
-            throw ApplicationFailure.newNonRetryableFailure(
-                    "quantity must be positive, skuId=" + item.getSkuId(), "InvalidCheckoutRequest");
-        }
-
-        // 1. 幂等：同单同 SKU 已有流水则跳过（一行记录，type 表示占用/释放状态）
-        StockLedger existing = stockLedgerDao.selectByOrderNumberAndSkuId(orderNumber, item.getSkuId());
-        if (existing != null) {
-            log.info("reserveStock idempotent hit, skip. orderNumber={} skuId={} type={}",
-                    orderNumber, item.getSkuId(), existing.getType());
-            return;
-        }
-
-        // 2. 先原子更新 sku_stock，再写 stock_ledger
-        int updated = skuStockDao.reserveStock(item.getSkuId(), item.getQuantity(), now);
-        if (updated == 0) {
-            throw ApplicationFailure.newNonRetryableFailure(
-                    "insufficient stock for skuId=" + item.getSkuId() + ", qty=" + item.getQuantity(),
-                    "InsufficientStock");
-        }
-
-        StockLedger ledger = StockLedger.builder()
-                .orderNumber(orderNumber)
-                .skuId(item.getSkuId())
-                .qty(item.getQuantity())
-                .type(LEDGER_TYPE_RESERVE)
-                .createTime(now)
-                .updateTime(now)
-                .build();
-        int inserted = stockLedgerDao.insert(ledger);
-        if (inserted == 0) {
-            throw ApplicationFailure.newFailure(
-                    "insert stock_ledger failed, orderNumber=" + orderNumber + ", skuId=" + item.getSkuId(),
-                    "StockLedgerInsertFailed");
-        }
-    }
-
-    @Override
-    public void confirmStock(String orderId) {
-        log.info("confirmStock orderId={}", orderId);
-        // 1. 幂等
-        // 2. 修改
-        // 3. rabbitmq发送异步消息去更新prod的库存
-    }
+    @Autowired
+    private ProdDao prodDao;
 
     @Override
     @Transactional
-    public void releaseStock(String orderId) {
-        log.info("releaseStock orderId={}", orderId);
-
-        if (!StringUtils.hasText(orderId)) {
-            throw ApplicationFailure.newNonRetryableFailure("orderId is required", "InvalidCheckoutRequest");
-        }
-
-        // 按该订单的预占流水逐 SKU 释放（无预占记录则无需释放）
-        List<StockLedger> reservedLedgers =
-                stockLedgerDao.selectByOrderNumberAndType(orderId, LEDGER_TYPE_RESERVE);
-        if (CollectionUtils.isEmpty(reservedLedgers)) {
-            log.info("releaseStock no reserve ledger, skip. orderId={}", orderId);
-            return;
-        }
+    public void reserveStock(StockChange stockChange) {
+        log.info("reserveStock orderId={}", stockChange.getOrderId());
+        validateStockChange(stockChange);
 
         LocalDateTime now = LocalDateTime.now();
-        for (StockLedger reserved : reservedLedgers) {
-            releaseOneSku(orderId, reserved, now);
+        String orderId = stockChange.getOrderId();
+
+        Order order = requireOrder(orderId);
+        Integer stockStatus = order.getStockStatus();
+        if (stockStatus != null && stockStatus == StockStatus.RESERVED) {
+            log.info("reserveStock idempotent hit, skip. orderId={} stockStatus={}",
+                    orderId, stockStatus);
+            return;
         }
-    }
-
-    private void releaseOneSku(String orderNumber, StockLedger reserved, LocalDateTime now) {
-        Long skuId = reserved.getSkuId();
-        Integer qty = reserved.getQty();
-
-        // 1. 先原子回滚 sku_stock
-        int updated = skuStockDao.releaseStock(skuId, qty, now);
-        if (updated == 0) {
-            throw ApplicationFailure.newFailure(
-                    "release stock failed for skuId=" + skuId + ", qty=" + qty,
-                    "ReleaseStockFailed");
+        if (stockStatus != null && stockStatus != StockStatus.NONE) {
+            throw ApplicationFailure.newNonRetryableFailure(
+                    "cannot reserve stock, orderId=" + orderId + ", stockStatus=" + stockStatus,
+                    "InvalidStockStatus");
         }
 
-        // 2. 再改同一条流水状态：占用(1)→释放(0)
-        //    marked==0 说明状态已不是占用（异常/并发），抛错让事务回滚已改的库存
-        int marked = stockLedgerDao.updateType(
-                reserved.getId(), LEDGER_TYPE_RESERVE, LEDGER_TYPE_RELEASE, now);
+        for (Sku sku : stockChange.getSkuList()) {
+            validateSku(sku);
+            int updated = skuStockDao.reserveStock(sku.getSkuId(), sku.getQuantity(), now);
+            if (updated == 0) {
+                throw ApplicationFailure.newNonRetryableFailure(
+                        "insufficient stock for skuId=" + sku.getSkuId() + ", qty=" + sku.getQuantity(),
+                        "InsufficientStock");
+            }
+        }
+
+        int marked = orderDao.casStockStatus(orderId, StockStatus.NONE, StockStatus.RESERVED, now);
         if (marked == 0) {
             throw ApplicationFailure.newFailure(
-                    "release ledger mark failed, orderNumber=" + orderNumber + ", skuId=" + skuId,
-                    "ReleaseLedgerMarkFailed");
+                    "mark stock reserved failed, orderId=" + orderId,
+                    "MarkStockReservedFailed");
         }
+    }
+
+    @Override
+    @Transactional
+    public void confirmStock(StockChange stockChange) {
+        log.info("confirmStock orderId={}", stockChange.getOrderId());
+        validateStockChange(stockChange);
+
+        LocalDateTime now = LocalDateTime.now();
+        String orderId = stockChange.getOrderId();
+
+        Order order = requireOrder(orderId);
+        Integer stockStatus = order.getStockStatus();
+        if (stockStatus != null && stockStatus == StockStatus.CONFIRMED) {
+            log.info("confirmStock idempotent hit, skip. orderId={}", orderId);
+            return;
+        }
+        if (stockStatus == null || stockStatus != StockStatus.RESERVED) {
+            throw ApplicationFailure.newNonRetryableFailure(
+                    "cannot confirm stock, orderId=" + orderId + ", stockStatus=" + stockStatus,
+                    "InvalidStockStatus");
+        }
+
+        // 先按 sku 确认，再按已汇总的 spu 扣减 prod
+        for (Sku sku : stockChange.getSkuList()) {
+            validateSku(sku);
+            int updated = skuStockDao.confirmStock(sku.getSkuId(), sku.getQuantity(), now);
+            if (updated == 0) {
+                throw ApplicationFailure.newFailure(
+                        "confirm stock failed for skuId=" + sku.getSkuId() + ", qty=" + sku.getQuantity(),
+                        "ConfirmStockFailed");
+            }
+        }
+
+        for (Spu spu : stockChange.getSpuList()) {
+            validateSpu(spu);
+            int prodUpdated = prodDao.deductStock(spu.getProdId(), spu.getQuantity(), now);
+            if (prodUpdated == 0) {
+                throw ApplicationFailure.newFailure(
+                        "deduct prod stock failed, prodId=" + spu.getProdId() + ", qty=" + spu.getQuantity(),
+                        "DeductProdStockFailed");
+            }
+        }
+
+        int marked = orderDao.casStockStatus(orderId, StockStatus.RESERVED, StockStatus.CONFIRMED, now);
+        if (marked == 0) {
+            throw ApplicationFailure.newFailure(
+                    "mark stock confirmed failed, orderId=" + orderId,
+                    "MarkStockConfirmedFailed");
+        }
+    }
+
+    @Override
+    @Transactional
+    public void releaseStock(StockChange stockChange) {
+        log.info("releaseStock orderId={}", stockChange.getOrderId());
+        validateStockChange(stockChange);
+
+        LocalDateTime now = LocalDateTime.now();
+        String orderId = stockChange.getOrderId();
+
+        Order order = requireOrder(orderId);
+        Integer stockStatus = order.getStockStatus();
+        if (stockStatus == StockStatus.RELEASED) {
+            log.info("releaseStock nothing to release, skip. orderId={} stockStatus={}",
+                    orderId, stockStatus);
+            return;
+        }
+        if (stockStatus != StockStatus.RESERVED) {
+            throw ApplicationFailure.newNonRetryableFailure(
+                    "cannot release stock, orderId=" + orderId + ", stockStatus=" + stockStatus,
+                    "InvalidStockStatus");
+        }
+
+        for (Sku sku : stockChange.getSkuList()) {
+            validateSku(sku);
+            int updated = skuStockDao.releaseStock(sku.getSkuId(), sku.getQuantity(), now);
+            if (updated == 0) {
+                throw ApplicationFailure.newFailure(
+                        "release stock failed for skuId=" + sku.getSkuId() + ", qty=" + sku.getQuantity(),
+                        "ReleaseStockFailed");
+            }
+        }
+
+        int marked = orderDao.casStockStatus(orderId, StockStatus.RESERVED, StockStatus.RELEASED, now);
+        if (marked == 0) {
+            throw ApplicationFailure.newFailure(
+                    "mark stock released failed, orderId=" + orderId,
+                    "MarkStockReleasedFailed");
+        }
+    }
+
+    private void validateStockChange(StockChange stockChange) {
+        if (stockChange == null || !StringUtils.hasText(stockChange.getOrderId())) {
+            throw ApplicationFailure.newNonRetryableFailure("orderId is required", "InvalidStockChange");
+        }
+        if (CollectionUtils.isEmpty(stockChange.getSkuList())) {
+            throw ApplicationFailure.newNonRetryableFailure("skuList is empty", "InvalidStockChange");
+        }
+    }
+
+    private void validateSku(Sku sku) {
+        if (sku.getSkuId() == null) {
+            throw ApplicationFailure.newNonRetryableFailure("skuId is required", "InvalidStockChange");
+        }
+        if (sku.getQuantity() == null || sku.getQuantity() <= 0) {
+            throw ApplicationFailure.newNonRetryableFailure(
+                    "quantity must be positive, skuId=" + sku.getSkuId(), "InvalidStockChange");
+        }
+    }
+
+    private void validateSpu(Spu spu) {
+        if (spu.getProdId() == null) {
+            throw ApplicationFailure.newNonRetryableFailure("prodId is required", "InvalidStockChange");
+        }
+        if (spu.getQuantity() == null || spu.getQuantity() <= 0) {
+            throw ApplicationFailure.newNonRetryableFailure(
+                    "quantity must be positive, prodId=" + spu.getProdId(), "InvalidStockChange");
+        }
+    }
+
+    private Order requireOrder(String orderId) {
+        Order order = orderDao.selectByOrderNumber(orderId);
+        if (order == null) {
+            throw ApplicationFailure.newNonRetryableFailure(
+                    "order not found, orderId=" + orderId, "OrderNotFound");
+        }
+        return order;
     }
 }
