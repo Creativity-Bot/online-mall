@@ -1,6 +1,7 @@
 package com.example.onlinemall.controller;
 
 import com.example.onlinemall.entity.Order;
+import com.example.onlinemall.exception.CheckoutWorkflowException;
 import com.example.onlinemall.model.ResponseTemplate;
 import com.example.onlinemall.model.checkout.*;
 import com.example.onlinemall.service.OrderService;
@@ -26,21 +27,49 @@ public class OrderController {
     }
 
     /**
-     * 确认下单：Update-with-Start，HTTP 同步等到 WAIT_PAY + payInfo。
+     * 确认下单：Update-with-Start。
+     * 启动 OrderCheckoutWorkflow，并通过 waitUntilPayable Update 同步等到建单 + 预占完成，
+     * 返回后进入选支付方式页；主流程继续挂起。
      * todo get the customer id from JWT
      */
     @PostMapping("/checkout")
     public ResponseTemplate checkout(@RequestBody CheckoutRequest request) {
-        PayInfo payInfo = orderService.checkout(request);
-        return new ResponseTemplate(200, "WAIT_PAY", payInfo);
+        try {
+            CheckoutReady ready = orderService.checkout(request);
+            return new ResponseTemplate(200, "WAIT_SELECT_PAYMENT", ready);
+        } catch (CheckoutWorkflowException e) {
+            return new ResponseTemplate(400, e.getErrorType(), e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return new ResponseTemplate(400, "BAD_REQUEST", e.getMessage());
+        }
     }
 
     /**
-     * 支付渠道回调：Signal 进行中的 Workflow。
+     * 选择支付方式：Workflow Update（非 Signal）。
+     * 唤醒挂起的 Workflow 创建渠道支付单，阻塞直到返回 PayInfo（payUrl 等）。
+     */
+    @PostMapping("/pay")
+    public ResponseTemplate selectPayment(@RequestBody SelectPaymentRequest request) {
+        try {
+            PayInfo payInfo = orderService.selectPayment(request);
+            return new ResponseTemplate(200, "WAIT_PAY", payInfo);
+        } catch (CheckoutWorkflowException e) {
+            return new ResponseTemplate(400, e.getErrorType(), e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return new ResponseTemplate(400, "BAD_REQUEST", e.getMessage());
+        }
+    }
+
+    /**
+     * 支付渠道 webhook：Signal paymentCompleted，唤醒 Workflow 完成后续确认。
      */
     @PostMapping("/payment/callback")
     public ResponseTemplate paymentCallback(@RequestBody PaymentCallback callback) {
-        orderService.handlePaymentCallback(callback);
-        return new ResponseTemplate(200, "SIGNALED", null);
+        try {
+            orderService.handlePaymentCallback(callback);
+            return new ResponseTemplate(200, "SIGNALED", null);
+        } catch (IllegalArgumentException e) {
+            return new ResponseTemplate(400, "BAD_REQUEST", e.getMessage());
+        }
     }
 }
