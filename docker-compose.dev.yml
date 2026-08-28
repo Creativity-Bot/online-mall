@@ -17,6 +17,18 @@ services:
     networks:
       - default
 
+  redis:
+    image: redis:7
+    container_name: onlinemall-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    networks:
+      - default
+
   app:
     build:
       context: .
@@ -24,12 +36,16 @@ services:
     container_name: onlinemall-app
     ports:
       - "8080:8080"
+      # IDEA / Cursor Remote JVM Debug 连这个端口
+      - "5005:5005"
     environment:
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DATABASE: onlinemall
       MYSQL_USER: root
       MYSQL_PASSWORD: root
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       # 指向另一组 Compose 里 Temporal 的「服务名:端口」
       TEMPORAL_TARGET: temporal:7233
       SPRING_DEVTOOLS_RESTART_LOG_LEVEL: debug
@@ -41,6 +57,7 @@ services:
       - m2_cache:/root/.m2
     depends_on:
       - mysql
+      - redis
     restart: "no"
     networks:
       - default
@@ -48,6 +65,7 @@ services:
 
 volumes:
   mysql_data:
+  redis_data:
   m2_cache:
 
 networks:

@@ -1,4 +1,4 @@
-package com.example.onlinemall.model.checkout;
+package com.example.onlinemall.dto;
 
 import lombok.Data;
 

@@ -6,8 +6,9 @@ cd /app
 echo ">>> Resolving Maven dependencies..."
 mvn -B -DskipTests dependency:resolve
 
-echo ">>> Starting Spring Boot (DevTools enabled)..."
-mvn -B -DskipTests spring-boot:run &
+echo ">>> Starting Spring Boot (DevTools + remote debug on :5005)..."
+mvn -B -DskipTests spring-boot:run \
+  -Dspring-boot.run.jvmArguments="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005" &
 BOOT_PID=$!
 
 checksum() {

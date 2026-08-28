@@ -15,6 +15,18 @@ services:
     networks:
       - default
 
+  redis:
+    image: redis:7
+    container_name: onlinemall-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    networks:
+      - default
+
   app:
     build:
       context: .
@@ -28,11 +40,14 @@ services:
       MYSQL_DATABASE: onlinemall
       MYSQL_USER: root
       MYSQL_PASSWORD: root
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       # 指向另一组 Compose 里 Temporal 的「服务名:端口」
       # 把 temporal 换成你那边实际的 service 名
       TEMPORAL_TARGET: temporal:7233
     depends_on:
       - mysql
+      - redis
     restart: unless-stopped
     networks:
       - default
@@ -41,6 +56,7 @@ services:
 
 volumes:
   mysql_data:
+  redis_data:
 
 networks:
   temporal-network:

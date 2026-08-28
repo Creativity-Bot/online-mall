@@ -7,9 +7,9 @@ import com.example.onlinemall.dao.OrderDao;
 import com.example.onlinemall.dao.OrderItemDao;
 import com.example.onlinemall.entity.Order;
 import com.example.onlinemall.entity.OrderItem;
-import com.example.onlinemall.model.checkout.CheckoutRequest;
-import com.example.onlinemall.model.checkout.ProductItem;
-import com.example.onlinemall.model.checkout.Shop;
+import com.example.onlinemall.dto.CheckoutRequest;
+import com.example.onlinemall.dto.ProductItem;
+import com.example.onlinemall.dto.Shop;
 import io.temporal.failure.ApplicationFailure;
 import io.temporal.spring.boot.ActivityImpl;
 import org.slf4j.Logger;
@@ -71,7 +71,7 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
         Order order = Order.builder()
                 .customerId(request.getCustomerId())
                 .orderNumber(request.getOrderId())
-                .totalAmount(request.getTotalAmount())
+                //.totalAmount(request.getTotalAmount())
                 .status(OrderStatus.WAIT_PAY)
                 .stockStatus(StockStatus.NONE)
                 .productNums(productNums)

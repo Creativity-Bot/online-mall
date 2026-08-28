@@ -1,6 +1,6 @@
 package com.example.onlinemall.activities;
 
-import com.example.onlinemall.model.checkout.CheckoutRequest;
+import com.example.onlinemall.dto.CheckoutRequest;
 import io.temporal.activity.ActivityInterface;
 import io.temporal.activity.ActivityMethod;
 
