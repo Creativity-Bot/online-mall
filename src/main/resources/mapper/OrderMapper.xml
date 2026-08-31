@@ -6,7 +6,6 @@
     <resultMap id="BaseResultMap" type="com.example.onlinemall.entity.Order">
         <id property="orderId" column="order_id"/>
         <result property="customerId" column="customer_id"/>
-        <result property="orderNumber" column="order_number"/>
         <result property="totalAmount" column="total_amount"/>
         <result property="actualPaid" column="actual_paid"/>
         <result property="remarks" column="remarks"/>
@@ -33,7 +32,7 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        order_id, customer_id, order_number, total_amount, actual_paid, remarks, status, stock_status, dvy_type, dvy_id, dvy_flow_id, freight_amount, addr_order_id, product_nums, pay_deadline, create_time, update_time, pay_time, dvy_time, finished_time, cancel_time, is_payed, delete_status, refund_sts, reduce_amount, close_type
+        order_id, customer_id, total_amount, actual_paid, remarks, status, stock_status, dvy_type, dvy_id, dvy_flow_id, freight_amount, addr_order_id, product_nums, pay_deadline, create_time, update_time, pay_time, dvy_time, finished_time, cancel_time, is_payed, delete_status, refund_sts, reduce_amount, close_type
     </sql>
 
     <select id="selectById" resultMap="BaseResultMap">
@@ -43,29 +42,21 @@
         WHERE order_id = #{id}
     </select>
 
-    <select id="selectByOrderNumber" resultMap="BaseResultMap">
-        SELECT
-        <include refid="Base_Column_List"/>
-        FROM orders
-        WHERE order_number = #{orderNumber}
-    </select>
-
     <select id="selectAll" resultMap="BaseResultMap">
         SELECT
         <include refid="Base_Column_List"/>
         FROM orders
     </select>
 
-    <insert id="insert" useGeneratedKeys="true" keyProperty="orderId" keyColumn="order_id">
-        INSERT INTO orders (customer_id, order_number, total_amount, actual_paid, remarks, status, stock_status, dvy_type, dvy_id, dvy_flow_id, freight_amount, addr_order_id, product_nums, pay_deadline, create_time, update_time, pay_time, dvy_time, finished_time, cancel_time, is_payed, delete_status, refund_sts, reduce_amount, close_type)
-        VALUES (#{customerId}, #{orderNumber}, #{totalAmount}, #{actualPaid}, #{remarks}, #{status}, #{stockStatus}, #{dvyType}, #{dvyId}, #{dvyFlowId}, #{freightAmount}, #{addrOrderId}, #{productNums}, #{payDeadline}, #{createTime}, #{updateTime}, #{payTime}, #{dvyTime}, #{finishedTime}, #{cancelTime}, #{isPayed}, #{deleteStatus}, #{refundSts}, #{reduceAmount}, #{closeType})
+    <insert id="insert">
+        INSERT INTO orders (order_id, customer_id, total_amount, actual_paid, remarks, status, stock_status, dvy_type, dvy_id, dvy_flow_id, freight_amount, addr_order_id, product_nums, pay_deadline, create_time, update_time, pay_time, dvy_time, finished_time, cancel_time, is_payed, delete_status, refund_sts, reduce_amount, close_type)
+        VALUES (#{orderId}, #{customerId}, #{totalAmount}, #{actualPaid}, #{remarks}, #{status}, #{stockStatus}, #{dvyType}, #{dvyId}, #{dvyFlowId}, #{freightAmount}, #{addrOrderId}, #{productNums}, #{payDeadline}, #{createTime}, #{updateTime}, #{payTime}, #{dvyTime}, #{finishedTime}, #{cancelTime}, #{isPayed}, #{deleteStatus}, #{refundSts}, #{reduceAmount}, #{closeType})
     </insert>
 
     <update id="updateById">
         UPDATE orders
         SET
             customer_id = #{customerId},
-            order_number = #{orderNumber},
             total_amount = #{totalAmount},
             actual_paid = #{actualPaid},
             remarks = #{remarks},
@@ -92,29 +83,30 @@
         WHERE order_id = #{orderId}
     </update>
 
-    <update id="markCancelledByOrderNumber">
+    <update id="markCancelledByOrderId">
         UPDATE orders
         SET status = #{status},
             cancel_time = #{cancelTime},
             update_time = #{cancelTime}
-        WHERE order_number = #{orderNumber}
+        WHERE order_id = #{orderId}
           AND status != #{status}
     </update>
 
-    <update id="markPaidByOrderNumber">
+    <update id="markPaidByOrderId">
         UPDATE orders
         SET status = #{status},
-        pay_time = #{payTime},
-        update_time = #{payTime}
-        WHERE order_number = #{orderNumber}
-        AND status != #{status}
+            pay_time = #{payTime},
+            update_time = #{payTime},
+            is_payed = 1
+        WHERE order_id = #{orderId}
+          AND status != #{status}
     </update>
 
     <update id="casStockStatus">
         UPDATE orders
         SET stock_status = #{toStatus},
             update_time = #{updateTime}
-        WHERE order_number = #{orderNumber}
+        WHERE order_id = #{orderId}
           AND stock_status = #{fromStatus}
     </update>
 

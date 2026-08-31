@@ -1,6 +1,7 @@
 package com.example.onlinemall.activities;
 
-import com.example.onlinemall.model.checkout.StockChange;
+import com.example.onlinemall.dto.CheckoutRequestDTO;
+import com.example.onlinemall.dto.StockChange;
 import io.temporal.activity.ActivityInterface;
 import io.temporal.activity.ActivityMethod;
 
@@ -8,11 +9,11 @@ import io.temporal.activity.ActivityMethod;
 public interface ReserveStockActivities {
 
     @ActivityMethod
-    void reserveStock(StockChange stockChange);
+    void reserveStock(CheckoutRequestDTO stockChange);
 
     @ActivityMethod
-    void confirmStock(StockChange stockChange);
+    void releaseStock(CheckoutRequestDTO stockChange);
 
     @ActivityMethod
-    void releaseStock(StockChange stockChange);
+    void confirmStock(CheckoutRequestDTO stockChange);
 }

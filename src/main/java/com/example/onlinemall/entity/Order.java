@@ -13,9 +13,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class Order {
+    /** 业务侧手动赋值的主键 */
     private Long orderId;
     private String customerId;
-    private String orderNumber;
     private BigDecimal totalAmount;
     private BigDecimal actualPaid;
     private String remarks;

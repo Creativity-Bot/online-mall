@@ -10,7 +10,7 @@ import java.util.Objects;
 @Data
 public class StockChange {
 
-    private String orderId;
+    private Long orderId;
     private List<Sku> skuList = new ArrayList<>();
     private List<Spu> spuList = new ArrayList<>();
 

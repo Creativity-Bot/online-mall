@@ -6,7 +6,7 @@
     <resultMap id="BaseResultMap" type="com.example.onlinemall.entity.OrderItem">
         <id property="orderItemId" column="order_item_id"/>
         <result property="shopId" column="shop_id"/>
-        <result property="orderNumber" column="order_number"/>
+        <result property="orderId" column="order_id"/>
         <result property="prodId" column="prod_id"/>
         <result property="skuId" column="sku_id"/>
         <result property="prodCount" column="prod_count"/>
@@ -19,7 +19,7 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        order_item_id, shop_id, order_number, prod_id, sku_id, prod_count, prod_name, sku_name, pic, price, total_amount, create_time
+        order_item_id, shop_id, order_id, prod_id, sku_id, prod_count, prod_name, sku_name, pic, price, total_amount, create_time
     </sql>
 
     <select id="selectById" resultMap="BaseResultMap">
@@ -36,15 +36,15 @@
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="orderItemId" keyColumn="order_item_id">
-        INSERT INTO order_item (shop_id, order_number, prod_id, sku_id, prod_count, prod_name, sku_name, pic, price, total_amount, create_time)
-        VALUES (#{shopId}, #{orderNumber}, #{prodId}, #{skuId}, #{prodCount}, #{prodName}, #{skuName}, #{pic}, #{price}, #{totalAmount}, #{createTime})
+        INSERT INTO order_item (shop_id, order_id, prod_id, sku_id, prod_count, prod_name, sku_name, pic, price, total_amount, create_time)
+        VALUES (#{shopId}, #{orderId}, #{prodId}, #{skuId}, #{prodCount}, #{prodName}, #{skuName}, #{pic}, #{price}, #{totalAmount}, #{createTime})
     </insert>
 
     <update id="updateById">
         UPDATE order_item
         SET
             shop_id = #{shopId},
-            order_number = #{orderNumber},
+            order_id = #{orderId},
             prod_id = #{prodId},
             sku_id = #{skuId},
             prod_count = #{prodCount},

@@ -8,7 +8,7 @@ import lombok.Data;
 public class OrderItem {
     private Long orderItemId;
     private Long shopId;
-    private String orderNumber;
+    private Long orderId;
     private Long prodId;
     private Long skuId;
     private Integer prodCount;

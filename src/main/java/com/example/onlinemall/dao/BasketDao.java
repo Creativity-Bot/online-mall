@@ -19,6 +19,6 @@ public interface BasketDao {
 
     int deleteById(@Param("id") Long id);
 
-    List<Basket> selectByCustomerId(@Param("id") String customerId);
+    List<Basket> selectByCustomerId(@Param("id") Long customerId);
 
 }

@@ -1,9 +1,8 @@
 package com.example.onlinemall.workflow.impl;
 
 import com.example.onlinemall.activities.CreateOrderActivities;
-import com.example.onlinemall.activities.PaymentActivities;
 import com.example.onlinemall.activities.ReserveStockActivities;
-import com.example.onlinemall.model.checkout.*;
+import com.example.onlinemall.dto.*;
 import com.example.onlinemall.workflow.OrderCheckoutWorkflow;
 import io.temporal.activity.ActivityOptions;
 import io.temporal.common.RetryOptions;
@@ -14,7 +13,6 @@ import io.temporal.workflow.Workflow;
 import org.slf4j.Logger;
 
 import java.time.Duration;
-import java.util.Objects;
 
 @WorkflowImpl(workers = "order-service-worker")
 public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
@@ -32,18 +30,6 @@ public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
                                     .build())
                     .build();
 
-    /** 支付成功后：只向前重试，不回滚；maximumAttempts=0 表示无限重试 */
-    private static final ActivityOptions POST_PAYMENT_OPTIONS =
-            ActivityOptions.newBuilder()
-                    .setStartToCloseTimeout(Duration.ofSeconds(15))
-                    .setRetryOptions(
-                            RetryOptions.newBuilder()
-                                    .setInitialInterval(Duration.ofSeconds(1))
-                                    .setBackoffCoefficient(2.0)
-                                    .setMaximumInterval(Duration.ofMinutes(1))
-                                    .setMaximumAttempts(0)
-                                    .build())
-                    .build();
 
     private final CreateOrderActivities orderActivities =
             Workflow.newActivityStub(CreateOrderActivities.class, DEFAULT_OPTIONS);
@@ -51,233 +37,77 @@ public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
     private final ReserveStockActivities stockActivities =
             Workflow.newActivityStub(ReserveStockActivities.class, DEFAULT_OPTIONS);
 
-    private final PaymentActivities paymentActivities =
-            Workflow.newActivityStub(PaymentActivities.class, DEFAULT_OPTIONS);
-
-    private final CreateOrderActivities postPaymentOrderActivities =
-            Workflow.newActivityStub(CreateOrderActivities.class, POST_PAYMENT_OPTIONS);
-
-    private final ReserveStockActivities postPaymentStockActivities =
-            Workflow.newActivityStub(ReserveStockActivities.class, POST_PAYMENT_OPTIONS);
-
-    private String orderId;
-
     private boolean initDone = false;
+
     private Exception initError;
 
-    private boolean payMethodSelected = false;
-    private String selectedPayMethod;
-    private boolean payInfoReady = false;
-    private Exception createPaymentError;
-    private PayInfo payInfo;
-
     private boolean paymentDone = false;
-    private PaymentCallback paymentCallback;
 
-    /** 主流程已进入取消/补偿，供 Update handler 快速失败 */
-    private boolean cancelled = false;
-    private String cancelReason;
+    private Long orderId;
+
 
     @Override
-    public OrderCheckoutResult run(CheckoutRequest request) {
-        this.orderId = request.getOrderId();
+    public ResponseTemplate<OrderCheckoutResult> run(CheckoutRequestDTO request) {
         Saga saga = new Saga(new Saga.Options.Builder().setParallelCompensation(false).build());
-        StockChange stockChange = buildStockChange(request);
-        long deadlineMs = Workflow.currentTimeMillis() + PAY_DEADLINE.toMillis();
 
-        // ---- 阶段 A：建单 + 预占，尽快返回选支付页 ----
+        // ---- step A：create order + reserve sku and return order Id  ----
         try {
             orderActivities.createOrder(request);
-            saga.addCompensation(orderActivities::markOrderCancelled, orderId);
+            saga.addCompensation(orderActivities::markOrderCancelled, request);
 
-            stockActivities.reserveStock(stockChange);
-            saga.addCompensation(stockActivities::releaseStock, stockChange);
+            stockActivities.reserveStock(request);
+            saga.addCompensation(stockActivities::releaseStock, request);
         } catch (Exception e) {
             initError = e;
+            if(e.getCause() instanceof ApplicationFailure
+            && "InsufficientStock".equals(((ApplicationFailure)e.getCause()).getType())){
+                log.info("compensation starts from step of reservation stock");
+                saga.compensate();
+            }
+            // for other unexpected error, need to reset manually (such as timeout)
         } finally {
             initDone = true;
         }
 
         if (initError != null) {
-            markCancelled(initError.getMessage() == null ? "checkout init failed" : initError.getMessage());
-            saga.compensate();
-            return new OrderCheckoutResult(orderId, "CANCELLED", cancelReason);
+            log.error("Order workflow Exception: {}", initError.getMessage());
+            throw ApplicationFailure.newNonRetryableFailure(
+                    initError.getMessage(),
+                    "CheckoutInitFailed");
         }
 
-        // ---- 等待 1：用户选择支付方式 ----
-        Duration remainToSelect = remaining(deadlineMs);
-        if (remainToSelect.isZero() || remainToSelect.isNegative()
-                || !Workflow.await(remainToSelect, () -> payMethodSelected || cancelled)) {
-            markCancelled("select payment timeout");
+        // ---- step B：set a timer for 30 mins for customer to pay ----
+        boolean await = Workflow.await(PAY_DEADLINE, () -> paymentDone);
+
+        if (!await) {
+            log.error("Order {} timeout", request.getOrderId());
             saga.compensate();
-            return new OrderCheckoutResult(orderId, "CANCELLED", cancelReason);
-        }
-        if (cancelled) {
-            saga.compensate();
-            return new OrderCheckoutResult(orderId, "CANCELLED", cancelReason);
+        } else {
+            // mark order as paid
+            orderActivities.markOrderPaid(request);
         }
 
-        try {
-            payInfo = paymentActivities.createPayment(CreatePaymentRequest.builder()
-                    .orderId(orderId)
-                    .customerId(request.getCustomerId())
-                    .totalAmount(request.getTotalAmount())
-                    .payMethod(selectedPayMethod)
-                    .build());
-            saga.addCompensation(paymentActivities::cancelPayment, orderId);
-        } catch (Exception e) {
-            createPaymentError = e;
-            markCancelled(e.getMessage() == null ? "create payment failed" : e.getMessage());
-            saga.compensate();
-            return new OrderCheckoutResult(orderId, "CANCELLED", cancelReason);
-        } finally {
-            // 唤醒 selectPayment Update（成功或失败）
-            payInfoReady = true;
-        }
-
-        // ---- 等待 2：支付渠道回调 ----
-        Duration remainToPay = remaining(deadlineMs);
-        boolean paidInTime = !remainToPay.isZero() && !remainToPay.isNegative()
-                && Workflow.await(remainToPay, () -> paymentDone || cancelled);
-        if (cancelled) {
-            saga.compensate();
-            return new OrderCheckoutResult(orderId, "CANCELLED", cancelReason);
-        }
-        if (!paidInTime || paymentCallback == null || !paymentCallback.isSuccess()) {
-            markCancelled("payment timeout or failed");
-            saga.compensate();
-            return new OrderCheckoutResult(orderId, "CANCELLED", cancelReason);
-        }
-
-        // 已付款：只向前恢复，失败则一直重试，不做 Saga 补偿
-        postPaymentOrderActivities.markOrderPaid(orderId);
-        postPaymentStockActivities.confirmStock(stockChange);
-        postPaymentOrderActivities.clearCart(request.getCustomerId());
-        return new OrderCheckoutResult(orderId, "PAID", "ok");
+        stockActivities.confirmStock(request);
+        //postPaymentOrderActivities.clearCart(request);
+        return ResponseTemplate.success(new OrderCheckoutResult(request.getOrderId(), "PAID", "ok"));
     }
 
-    private void markCancelled(String reason) {
-        this.cancelled = true;
-        this.cancelReason = reason;
-    }
-
-    private static Duration remaining(long deadlineMs) {
-        long left = deadlineMs - Workflow.currentTimeMillis();
-        return left <= 0 ? Duration.ZERO : Duration.ofMillis(left);
-    }
-
-    private StockChange buildStockChange(CheckoutRequest request) {
-        StockChange stockChange = new StockChange();
-        stockChange.setOrderId(request.getOrderId());
-
-        if (request.getItems() == null) {
-            return stockChange;
-        }
-        request.getItems().forEach(shop -> {
-            if (shop.getProductItemList() == null) {
-                return;
+    @Override
+    public ResponseTemplate<?> waitUntilPayable() {
+        Workflow.await(() -> initDone);
+        if (initError != null) {
+            if (initError.getCause() instanceof ApplicationFailure
+                    && "InsufficientStock".equals(((ApplicationFailure) initError.getCause()).getType())) {
+                return ResponseTemplate.fail("insufficient stock");
+            } else {
+                return ResponseTemplate.fail("checkout meets unexpected issue");
             }
-            shop.getProductItemList().forEach(productItem -> {
-                stockChange.addSku(Sku.builder()
-                        .skuId(productItem.getSkuId())
-                        .quantity(productItem.getQuantity())
-                        .build());
-
-                stockChange.addOrMergeSpu(Spu.builder()
-                        .prodId(productItem.getProdId())
-                        .quantity(productItem.getQuantity())
-                        .build());
-            });
-        });
-
-        stockChange.sort();
-        return stockChange;
-    }
-
-    @Override
-    public CheckoutReady waitUntilPayable() {
-        Workflow.await(() -> initDone || cancelled);
-        if (initError != null) {
-            throw ApplicationFailure.newNonRetryableFailure(
-                    initError.getMessage() == null ? "checkout init failed" : initError.getMessage(),
-                    "CheckoutInitFailed");
         }
-        rejectIfCancelled();
-        return new CheckoutReady(orderId, "WAIT_SELECT_PAYMENT");
-    }
-
-    @Override
-    public PayInfo selectPayment(SelectPaymentRequest request) {
-        if (request == null || request.getPayMethod() == null || request.getPayMethod().isBlank()) {
-            throw ApplicationFailure.newNonRetryableFailure("payMethod is required", "InvalidSelectPayment");
-        }
-        Workflow.await(() -> initDone || cancelled);
-        if (initError != null) {
-            throw ApplicationFailure.newNonRetryableFailure(
-                    initError.getMessage() == null ? "checkout init failed" : initError.getMessage(),
-                    "CheckoutInitFailed");
-        }
-        rejectIfCancelled();
-        if (paymentDone) {
-            throw ApplicationFailure.newNonRetryableFailure(
-                    "payment already completed",
-                    "PaymentAlreadyCompleted");
-        }
-
-        // 幂等：已创建过支付单则直接返回
-        if (payInfo != null && payInfoReady) {
-            return payInfo;
-        }
-
-        this.selectedPayMethod = request.getPayMethod();
-        this.payMethodSelected = true;
-
-        Workflow.await(() -> payInfoReady || cancelled);
-        if (createPaymentError != null) {
-            throw ApplicationFailure.newNonRetryableFailure(
-                    createPaymentError.getMessage() == null
-                            ? "create payment failed"
-                            : createPaymentError.getMessage(),
-                    "CreatePaymentFailed");
-        }
-        rejectIfCancelled();
-        return payInfo;
-    }
-
-    private void rejectIfCancelled() {
-        if (cancelled) {
-            throw ApplicationFailure.newNonRetryableFailure(
-                    cancelReason == null ? "checkout cancelled" : cancelReason,
-                    "CheckoutCancelled");
-        }
+        return ResponseTemplate.success(orderId.toString());
     }
 
     @Override
     public void paymentCompleted(PaymentCallback callback) {
-        if (callback == null) {
-            log.warn("ignore paymentCompleted: null callback");
-            return;
-        }
-        // 支付单尚未创建前忽略回调，避免伪造提前 Signal
-        if (payInfo == null) {
-            log.warn("ignore paymentCompleted before payInfo ready, orderId={}", callback.getOrderId());
-            return;
-        }
-        if (cancelled) {
-            log.warn("ignore paymentCompleted after cancelled, orderId={}", orderId);
-            return;
-        }
-        if (!Objects.equals(orderId, callback.getOrderId())) {
-            log.warn("ignore paymentCompleted orderId mismatch, expected={}, actual={}",
-                    orderId, callback.getOrderId());
-            return;
-        }
-        if (!Objects.equals(payInfo.getPaymentId(), callback.getPaymentId())) {
-            log.warn("ignore paymentCompleted paymentId mismatch, expected={}, actual={}, orderId={}",
-                    payInfo.getPaymentId(), callback.getPaymentId(), orderId);
-            return;
-        }
-        this.paymentCallback = callback;
         this.paymentDone = true;
     }
 }

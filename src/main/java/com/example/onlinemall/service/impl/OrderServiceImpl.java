@@ -1,11 +1,13 @@
 package com.example.onlinemall.service.impl;
 
 import com.example.onlinemall.constant.SharedConstants;
+import com.example.onlinemall.dao.BasketDao;
 import com.example.onlinemall.dao.OrderDao;
+import com.example.onlinemall.dto.*;
 import com.example.onlinemall.entity.Order;
 import com.example.onlinemall.exception.CheckoutWorkflowException;
-import com.example.onlinemall.model.checkout.*;
 import com.example.onlinemall.service.OrderService;
+import com.example.onlinemall.utils.IDGenerator;
 import com.example.onlinemall.workflow.OrderCheckoutWorkflow;
 import io.temporal.api.enums.v1.WorkflowIdConflictPolicy;
 import io.temporal.client.UpdateOptions;
@@ -15,18 +17,28 @@ import io.temporal.client.WorkflowOptions;
 import io.temporal.client.WorkflowUpdateException;
 import io.temporal.client.WorkflowUpdateStage;
 import io.temporal.failure.ApplicationFailure;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
-import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
+import static com.example.onlinemall.constant.RedisConstant.ORDER_ID_KEY;
+
+@Slf4j
 @Service
 public class OrderServiceImpl implements OrderService {
 
     @Autowired
     private OrderDao orderDao;
+
+    @Autowired
+    private BasketDao cartDao;
+
+    @Autowired
+    private IDGenerator idGenerator;
 
     @Autowired
     private WorkflowClient workflowClient;
@@ -61,13 +73,12 @@ public class OrderServiceImpl implements OrderService {
      * Update-with-Start 非原子：若 Workflow 已 Start 而 Update 失败，对同一 workflowId 再发 waitUntilPayable。
      */
     @Override
-    public CheckoutReady checkout(CheckoutRequest request) {
-        if (!StringUtils.hasText(request.getOrderId())) {
-            request.setOrderId(UUID.randomUUID().toString().replace("-", ""));
-        }
-
-        String workflowId = "order-" + request.getOrderId();
-        String updateId = "waitUntilPayable-" + request.getOrderId();
+    public ResponseTemplate<?> checkout(CheckoutRequestDTO request) {
+        long l = idGenerator.nextId(ORDER_ID_KEY);
+        request.setOrderId(l);
+        String idempotence = request.getIdempotence();
+        String workflowId = "order-" + idempotence;
+        String updateId = "waitUntilPayable-" + idempotence;
 
         WorkflowOptions options = WorkflowOptions.newBuilder()
                 .setTaskQueue(SharedConstants.ORDER_SERVICE_TASK_QUEUE)
@@ -78,65 +89,41 @@ public class OrderServiceImpl implements OrderService {
         OrderCheckoutWorkflow workflow = workflowClient.newWorkflowStub(OrderCheckoutWorkflow.class, options);
 
         try {
-            return WorkflowClient.executeUpdateWithStart(
-                    workflow::waitUntilPayable,
-                    UpdateOptions.<CheckoutReady>newBuilder()
-                            .setUpdateName("waitUntilPayable")
-                            .setUpdateId(updateId)
-                            .build(),
-                    new WithStartWorkflowOperation<>(workflow::run, request)
-            );
-        } catch (Exception first) {
-            // Workflow 可能已启动；对已存在执行再发同名 Update（不重新 Start）
-            try {
-                OrderCheckoutWorkflow existing = workflowClient.newWorkflowStub(
-                        OrderCheckoutWorkflow.class, workflowId);
-                return WorkflowClient.startUpdate(
-                                existing::waitUntilPayable,
-                                UpdateOptions.<CheckoutReady>newBuilder()
-                                        .setUpdateName("waitUntilPayable")
-                                        .setUpdateId(updateId)
-                                        .setWaitForStage(WorkflowUpdateStage.COMPLETED)
-                                        .build())
-                        .getResult();
-            } catch (Exception fallback) {
-                throw mapCheckoutFailure(fallback, first);
-            }
+            // early return mode to get orderId in the middle
+            return WorkflowClient.startUpdateWithStart(
+                            workflow::waitUntilPayable,
+                            UpdateOptions.<ResponseTemplate<?>>newBuilder()
+                                    .setUpdateName("waitUntilPayable")
+                                    .setUpdateId(updateId)
+                                    .setWaitForStage(WorkflowUpdateStage.COMPLETED)
+                                    .build(),
+                            new WithStartWorkflowOperation<>(workflow::run, request))
+                    .getResult(10L, TimeUnit.SECONDS);
+        } catch (RuntimeException exception) {
+            log.error("checkout failed due to {}", exception.getMessage());
+            return ResponseTemplate.fail(exception.getMessage());
         }
     }
 
     /**
-     * 选择支付方式：Workflow Update（非 Signal），阻塞直到 createPayment 完成并返回 PayInfo。
+     * 选择支付方式：Workflow Update，阻塞直到 createPayment 完成并返回 PayInfo。
      */
     @Override
-    public PayInfo selectPayment(SelectPaymentRequest request) {
+    public PayInfo pay(SelectPaymentRequest request) {
         if (request == null || !StringUtils.hasText(request.getOrderId())) {
             throw new IllegalArgumentException("orderId is required");
         }
         if (!StringUtils.hasText(request.getPayMethod())) {
             throw new IllegalArgumentException("payMethod is required");
         }
-
-        OrderCheckoutWorkflow workflow = workflowClient.newWorkflowStub(
-                OrderCheckoutWorkflow.class,
-                "order-" + request.getOrderId()
-        );
-        try {
-            return WorkflowClient.startUpdate(
-                            workflow::selectPayment,
-                            request,
-                            UpdateOptions.<PayInfo>newBuilder()
-                                    .setUpdateName("selectPayment")
-                                    .setUpdateId("selectPayment-" + request.getOrderId())
-                                    .setWaitForStage(WorkflowUpdateStage.COMPLETED)
-                                    .build())
-                    .getResult();
-        } catch (Exception e) {
-            throw mapCheckoutFailure(e, null);
-        }
+        // call payment service with orderId and other required information
+        // it will return prepaid information back to client
+        return new PayInfo();
     }
 
-    /** 支付渠道 webhook：Signal 唤醒挂起的 Workflow。 */
+    /**
+     * 支付渠道 webhook：Signal 唤醒挂起的 Workflow。
+     */
     @Override
     public void handlePaymentCallback(PaymentCallback callback) {
         if (callback == null || !StringUtils.hasText(callback.getOrderId())) {
@@ -148,66 +135,5 @@ public class OrderServiceImpl implements OrderService {
         );
         workflow.paymentCompleted(callback);
     }
-
-    /**
-     * 优先从 fallback 异常提取 ApplicationFailure；否则用 primary。
-     */
-    private static CheckoutWorkflowException mapCheckoutFailure(Exception primary, Exception secondary) {
-        CheckoutWorkflowException mapped = unwrapCheckoutException(primary);
-        if (mapped != null) {
-            return mapped;
-        }
-        if (secondary != null) {
-            mapped = unwrapCheckoutException(secondary);
-            if (mapped != null) {
-                return mapped;
-            }
-        }
-        String message = primary.getMessage() == null ? "checkout workflow failed" : primary.getMessage();
-        return new CheckoutWorkflowException("CheckoutFailed", message, primary);
-    }
-
-    private static CheckoutWorkflowException unwrapCheckoutException(Throwable error) {
-        Throwable cursor = error;
-        while (cursor != null) {
-            if (cursor instanceof WorkflowUpdateException) {
-                Throwable cause = cursor.getCause();
-                ApplicationFailure af = findApplicationFailure(cause);
-                if (af != null) {
-                    String msg = af.getOriginalMessage();
-                    if (!StringUtils.hasText(msg)) {
-                        msg = af.getMessage();
-                    }
-                    return new CheckoutWorkflowException(af.getType(), msg, error);
-                }
-                return new CheckoutWorkflowException(
-                        "WorkflowUpdateFailed",
-                        cursor.getMessage() == null ? "workflow update failed" : cursor.getMessage(),
-                        error);
-            }
-            ApplicationFailure af = cursor instanceof ApplicationFailure
-                    ? (ApplicationFailure) cursor
-                    : null;
-            if (af != null) {
-                String msg = af.getOriginalMessage();
-                if (!StringUtils.hasText(msg)) {
-                    msg = af.getMessage();
-                }
-                return new CheckoutWorkflowException(af.getType(), msg, error);
-            }
-            cursor = cursor.getCause();
-        }
-        return null;
-    }
-
-    private static ApplicationFailure findApplicationFailure(Throwable error) {
-        Throwable cursor = error;
-        while (cursor != null) {
-            if (cursor instanceof ApplicationFailure) {
-                return (ApplicationFailure) cursor;
-            }
-            cursor = cursor.getCause();
-        }
-        return null;
-    }
 }
+

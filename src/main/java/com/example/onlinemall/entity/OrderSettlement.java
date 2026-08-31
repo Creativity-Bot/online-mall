@@ -7,7 +7,7 @@ import lombok.Data;
 @Data
 public class OrderSettlement {
     private Long settlementId;
-    private String orderNumber;
+    private Long orderId;
     private String merchantTradeNo;
     private String bizPayNo;
     private Integer payType;

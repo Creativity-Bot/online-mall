@@ -1,6 +1,6 @@
 package com.example.onlinemall.activities;
 
-import com.example.onlinemall.dto.CheckoutRequest;
+import com.example.onlinemall.dto.CheckoutRequestDTO;
 import io.temporal.activity.ActivityInterface;
 import io.temporal.activity.ActivityMethod;
 
@@ -8,14 +8,12 @@ import io.temporal.activity.ActivityMethod;
 public interface CreateOrderActivities {
 
     @ActivityMethod
-    void createOrder(CheckoutRequest request);
+    void createOrder(CheckoutRequestDTO request);
 
     @ActivityMethod
-    void clearCart(String customerId);
+    void markOrderCancelled(CheckoutRequestDTO request);
 
     @ActivityMethod
-    void markOrderPaid(String orderId);
+    void markOrderPaid(CheckoutRequestDTO request);
 
-    @ActivityMethod
-    void markOrderCancelled(String orderId);
 }
