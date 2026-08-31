@@ -53,15 +53,27 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
         // 2. 创建订单 + 订单项，status=待付款
         LocalDateTime now = LocalDateTime.now();
         List<Shop> shops = request.getItems() == null ? List.of() : request.getItems();
-        int productNums = shops.stream()
+        List<ProductItem> items = shops.stream()
                 .filter(shop -> shop.getProductItemList() != null)
                 .flatMap(shop -> shop.getProductItemList().stream())
-                .mapToInt(item -> item.getQuantity() == null ? 0 : item.getQuantity())
+                .toList();
+
+        // 总金额 = Σ(单价 × 数量)
+        BigDecimal totalAmount = items.stream()
+                .filter(item -> item.getUnitPrice() != null && item.getQuantity() != null)
+                .map(item -> item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // 商品总件数
+        int productNums = items.stream()
+                .filter(item -> item.getQuantity() != null)
+                .mapToInt(ProductItem::getQuantity)
                 .sum();
 
         Order order = Order.builder()
                 .orderId(request.getOrderId())
-                .customerId(request.getCustomerId() == null ? null : String.valueOf(request.getCustomerId()))
+                .customerId(String.valueOf(request.getCustomerId()))
+                .totalAmount(totalAmount)
                 .status(OrderStatus.WAIT_PAY)
                 .stockStatus(StockStatus.NONE)
                 .productNums(productNums)
@@ -76,7 +88,7 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
                     "insert order failed, orderId=" + request.getOrderId(),
                     "OrderInsertFailed");
         }
-        insertOrderItems(request.getOrderId(), shops, now);
+        insertOrderItems(order.getOrderId(), shops, now);
     }
 
     private void insertOrderItems(Long orderId, List<Shop> shops, LocalDateTime now) {
@@ -125,7 +137,7 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
         }
 
         LocalDateTime now = LocalDateTime.now();
-        int updated = orderDao.markPaidByOrderId(orderId, OrderStatus.PAID, now);
+        int updated = orderDao.markPaidByOrderId(orderId, OrderStatus.PAID, OrderStatus.WAIT_PAY,  now);
         if (updated == 0) {
             throw ApplicationFailure.newFailure(
                     "update order failed, orderId=" + orderId,
@@ -145,13 +157,13 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
             throw ApplicationFailure.newNonRetryableFailure(
                     "order not found, orderId=" + orderId, "OrderNotFound");
         }
-        if (existing.getStatus() != null && existing.getStatus() == OrderStatus.CANCELLED) {
+        if (existing.getStatus() != null && existing.getStatus() == OrderStatus.FAILED) {
             log.info("markOrderCancelled already cancelled, skip. orderId={}", orderId);
             return;
         }
 
         LocalDateTime now = LocalDateTime.now();
-        int updated = orderDao.markCancelledByOrderId(orderId, OrderStatus.CANCELLED, now);
+        int updated = orderDao.markCancelledByOrderId(orderId, OrderStatus.FAILED, OrderStatus.WAIT_PAY, now);
         if (updated == 0) {
             throw ApplicationFailure.newFailure(
                     "update order failed, orderId=" + orderId,

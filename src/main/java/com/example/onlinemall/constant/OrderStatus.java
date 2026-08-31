@@ -5,9 +5,6 @@ package com.example.onlinemall.constant;
  */
 public interface OrderStatus {
 
-    /** 已取消 */
-    int CANCELLED = 0;
-
     /** 待付款 */
     int WAIT_PAY = 1;
 

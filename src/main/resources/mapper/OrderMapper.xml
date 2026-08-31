@@ -85,21 +85,21 @@
 
     <update id="markCancelledByOrderId">
         UPDATE orders
-        SET status = #{status},
+        SET status = #{toStatus},
             cancel_time = #{cancelTime},
             update_time = #{cancelTime}
         WHERE order_id = #{orderId}
-          AND status != #{status}
+          AND status = #{fromStatus}
     </update>
 
     <update id="markPaidByOrderId">
         UPDATE orders
-        SET status = #{status},
+        SET status = #{toStatus},
             pay_time = #{payTime},
             update_time = #{payTime},
             is_payed = 1
         WHERE order_id = #{orderId}
-          AND status != #{status}
+          AND status = #{fromStatus}
     </update>
 
     <update id="casStockStatus">

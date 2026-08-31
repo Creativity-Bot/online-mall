@@ -20,13 +20,15 @@ public interface OrderDao {
 
     /** 仅更新取消相关字段，避免全量 update 覆盖其它列 */
     int markCancelledByOrderId(@Param("orderId") Long orderId,
-                               @Param("status") Integer status,
+                               @Param("fromStatus") int fromStatus,
+                               @Param("toStatus") int toStatus,
                                @Param("cancelTime") LocalDateTime cancelTime);
 
     int deleteById(@Param("id") Long id);
 
     int markPaidByOrderId(@Param("orderId") Long orderId,
-                          @Param("status") int status,
+                          @Param("fromStatus") int fromStatus,
+                          @Param("toStatus") int toStatus,
                           @Param("payTime") LocalDateTime now);
 
     /** CAS 更新库存状态：仅当当前为 fromStatus 时改为 toStatus */
