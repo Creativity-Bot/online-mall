@@ -17,7 +17,7 @@ public interface OrderCheckoutWorkflow {
      * 与 Client 的 Update-with-Start 配合使用。
      */
     @UpdateMethod(name = "waitUntilPayable")
-    ResponseTemplate<?> waitUntilPayable();
+    ResponseTemplate<?> waitUntilPayable(CheckoutRequestDTO request);
 
 
     /** 支付渠道 webhook 回调：Signal 唤醒主流程，校验 orderId/paymentId 后继续确认付款 */

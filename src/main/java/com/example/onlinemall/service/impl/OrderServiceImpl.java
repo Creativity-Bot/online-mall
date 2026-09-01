@@ -91,7 +91,7 @@ public class OrderServiceImpl implements OrderService {
         try {
             // early return mode to get orderId in the middle
             return WorkflowClient.startUpdateWithStart(
-                            workflow::waitUntilPayable,
+                            () -> workflow.waitUntilPayable(request),
                             UpdateOptions.<ResponseTemplate<?>>newBuilder()
                                     .setUpdateName("waitUntilPayable")
                                     .setUpdateId(updateId)

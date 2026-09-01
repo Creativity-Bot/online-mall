@@ -31,9 +31,9 @@ public interface OrderDao {
                           @Param("toStatus") int toStatus,
                           @Param("payTime") LocalDateTime now);
 
-    /** CAS 更新库存状态：仅当当前为 fromStatus 时改为 toStatus */
-    int casStockStatus(@Param("orderId") Long orderId,
-                       @Param("fromStatus") int fromStatus,
-                       @Param("toStatus") int toStatus,
-                       @Param("updateTime") LocalDateTime updateTime);
+    /** 条件更新库存状态：仅当当前为 fromStatus 时改为 toStatus */
+    int updateStockStatus(@Param("orderId") Long orderId,
+                          @Param("fromStatus") int fromStatus,
+                          @Param("toStatus") int toStatus,
+                          @Param("updateTime") LocalDateTime updateTime);
 }

@@ -19,7 +19,7 @@ public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
 
     private static final Logger log = Workflow.getLogger(OrderCheckoutWorkflowImpl.class);
 
-    private static final Duration PAY_DEADLINE = Duration.ofMinutes(30);
+    private static final Duration PAY_DEADLINE = Duration.ofMinutes(32);
 
     private static final ActivityOptions DEFAULT_OPTIONS =
             ActivityOptions.newBuilder()
@@ -43,8 +43,6 @@ public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
 
     private boolean paymentDone = false;
 
-    private Long orderId;
-
 
     @Override
     public ResponseTemplate<OrderCheckoutResult> run(CheckoutRequestDTO request) {
@@ -64,7 +62,7 @@ public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
                 log.info("compensation starts from step of reservation stock");
                 saga.compensate();
             }
-            // for other unexpected error, need to reset manually (such as timeout)
+            // for other unexpected error (such as timeout), need to human intervene like reset workflow manually
         } finally {
             initDone = true;
         }
@@ -76,12 +74,13 @@ public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
                     "CheckoutInitFailed");
         }
 
-        // ---- step B：set a timer for 30 mins for customer to pay ----
+        // ---- step B：set a timer for 30 mins for payment time window plus 2 mins grace period ----
         boolean await = Workflow.await(PAY_DEADLINE, () -> paymentDone);
 
         if (!await) {
             log.error("Order {} timeout", request.getOrderId());
             saga.compensate();
+            throw ApplicationFailure.newNonRetryableFailure("payment timeout", "PaymentTimeout");
         } else {
             // mark order as paid
             orderActivities.markOrderPaid(request);
@@ -93,7 +92,7 @@ public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
     }
 
     @Override
-    public ResponseTemplate<?> waitUntilPayable() {
+    public ResponseTemplate<?> waitUntilPayable(CheckoutRequestDTO request) {
         Workflow.await(() -> initDone);
         if (initError != null) {
             if (initError.getCause() instanceof ApplicationFailure
@@ -103,7 +102,7 @@ public class OrderCheckoutWorkflowImpl implements OrderCheckoutWorkflow {
                 return ResponseTemplate.fail("checkout meets unexpected issue");
             }
         }
-        return ResponseTemplate.success(orderId.toString());
+        return ResponseTemplate.success(request.getOrderId().toString());
     }
 
     @Override

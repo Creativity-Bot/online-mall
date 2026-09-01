@@ -102,7 +102,7 @@
           AND status = #{fromStatus}
     </update>
 
-    <update id="casStockStatus">
+    <update id="updateStockStatus">
         UPDATE orders
         SET stock_status = #{toStatus},
             update_time = #{updateTime}

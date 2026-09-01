@@ -2,9 +2,12 @@ package com.example.onlinemall.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+
+import lombok.Builder;
 import lombok.Data;
 
 @Data
+@Builder
 public class OrderItem {
     private Long orderItemId;
     private Long shopId;

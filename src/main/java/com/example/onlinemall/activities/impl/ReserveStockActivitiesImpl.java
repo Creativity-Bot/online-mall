@@ -71,7 +71,7 @@ public class ReserveStockActivitiesImpl implements ReserveStockActivities {
             }
         }
 
-        int marked = orderDao.casStockStatus(orderId, StockStatus.NONE, StockStatus.RESERVED, now);
+        int marked = orderDao.updateStockStatus(orderId, StockStatus.NONE, StockStatus.RESERVED, now);
         if (marked == 0) {
             throw ApplicationFailure.newFailure(
                     "mark stock reserved failed, orderId=" + orderId,
@@ -123,7 +123,7 @@ public class ReserveStockActivitiesImpl implements ReserveStockActivities {
             }
         }
 
-        int marked = orderDao.casStockStatus(orderId, StockStatus.RESERVED, StockStatus.CONFIRMED, now);
+        int marked = orderDao.updateStockStatus(orderId, StockStatus.RESERVED, StockStatus.CONFIRMED, now);
         if (marked == 0) {
             throw ApplicationFailure.newFailure(
                     "mark stock confirmed failed, orderId=" + orderId,
@@ -163,7 +163,7 @@ public class ReserveStockActivitiesImpl implements ReserveStockActivities {
             }
         }
 
-        int marked = orderDao.casStockStatus(orderId, StockStatus.RESERVED, StockStatus.RELEASED, now);
+        int marked = orderDao.updateStockStatus(orderId, StockStatus.RESERVED, StockStatus.RELEASED, now);
         if (marked == 0) {
             throw ApplicationFailure.newFailure(
                     "mark stock released failed, orderId=" + orderId,
@@ -172,9 +172,6 @@ public class ReserveStockActivitiesImpl implements ReserveStockActivities {
     }
 
     private void validateRequest(CheckoutRequestDTO request) {
-        if (request == null || request.getOrderId() == null) {
-            throw ApplicationFailure.newNonRetryableFailure("orderId is required", "InvalidStockChange");
-        }
         if (CollectionUtils.isEmpty(flattenItems(request))) {
             throw ApplicationFailure.newNonRetryableFailure("items is empty", "InvalidStockChange");
         }

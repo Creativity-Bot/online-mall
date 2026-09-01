@@ -97,18 +97,16 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
                 continue;
             }
             for (ProductItem item : shop.getProductItemList()) {
-                OrderItem orderItem = new OrderItem();
-                orderItem.setOrderId(orderId);
-                orderItem.setProdName("mock_data");
-                orderItem.setProdId(item.getProdId());
-                orderItem.setSkuId(item.getSkuId());
-                orderItem.setProdCount(item.getQuantity());
-                orderItem.setPrice(item.getUnitPrice());
-                if (item.getUnitPrice() != null && item.getQuantity() != null) {
-                    orderItem.setTotalAmount(
-                            item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
-                }
-                orderItem.setCreateTime(now);
+                OrderItem orderItem = OrderItem.builder()
+                        .orderId(orderId)
+                        .prodName("mock_data")
+                        .prodId(item.getProdId())
+                        .skuId(item.getSkuId())
+                        .prodCount(item.getQuantity())
+                        .price(item.getUnitPrice())
+                        .totalAmount(item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                        .createTime(now)
+                        .build();
                 int inserted = orderItemDao.insert(orderItem);
                 if (inserted == 0) {
                     throw ApplicationFailure.newFailure(
