@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.example.onlinemall.dao.BasketDao">
+<mapper namespace="com.example.onlinemall.dao.CartDao">
 
-    <resultMap id="BaseResultMap" type="Basket">
-        <id property="basketId" column="basket_id"/>
+    <resultMap id="BaseResultMap" type="Cart">
+        <id property="cartId" column="basket_id"/>
         <result property="prodId" column="prod_id"/>
         <result property="shopId" column="shop_id"/>
         <result property="skuId" column="sku_id"/>
@@ -38,7 +38,7 @@
         FROM basket
     </select>
 
-    <insert id="insert" useGeneratedKeys="true" keyProperty="basketId" keyColumn="basket_id">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="cartId" keyColumn="basket_id">
         INSERT INTO basket (prod_id, shop_id, sku_id, customer_id, prod_count, create_time, update_time)
         VALUES (#{prodId}, #{shopId}, #{skuId}, #{customerId}, #{prodCount}, #{createTime}, #{updateTime})
     </insert>
@@ -53,7 +53,7 @@
             prod_count = #{prodCount},
             create_time = #{createTime},
             update_time = #{updateTime}
-        WHERE basket_id = #{basketId}
+        WHERE basket_id = #{cartId}
     </update>
 
     <delete id="deleteById">

@@ -4,8 +4,8 @@ import java.time.LocalDateTime;
 import lombok.Data;
 
 @Data
-public class Basket {
-    private Long basketId;
+public class CartItem {
+    private Long cartItemId;
     private Long prodId;
     private Long shopId;
     private Long skuId;

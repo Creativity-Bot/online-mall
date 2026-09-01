@@ -3,7 +3,7 @@ package com.example.onlinemall.activities.impl;
 import com.example.onlinemall.activities.CreateOrderActivities;
 import com.example.onlinemall.constant.OrderStatus;
 import com.example.onlinemall.constant.StockStatus;
-import com.example.onlinemall.dao.BasketDao;
+import com.example.onlinemall.dao.CartItemDao;
 import com.example.onlinemall.dao.OrderDao;
 import com.example.onlinemall.dao.OrderItemDao;
 import com.example.onlinemall.dto.CheckoutRequestDTO;
@@ -35,7 +35,7 @@ public class CreateOrderActivitiesImpl implements CreateOrderActivities {
     private OrderItemDao orderItemDao;
 
     @Autowired
-    private BasketDao cartDao;
+    private CartItemDao cartItemDao;
 
     @Override
     @Transactional

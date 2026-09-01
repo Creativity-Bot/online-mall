@@ -1,29 +1,34 @@
 package com.example.onlinemall.service.impl;
 
 import com.example.onlinemall.constant.SharedConstants;
-import com.example.onlinemall.dao.BasketDao;
+import com.example.onlinemall.dao.CartItemDao;
 import com.example.onlinemall.dao.OrderDao;
+import com.example.onlinemall.dao.SkuDao;
 import com.example.onlinemall.dto.*;
+import com.example.onlinemall.entity.CartItem;
 import com.example.onlinemall.entity.Order;
-import com.example.onlinemall.exception.CheckoutWorkflowException;
+import com.example.onlinemall.entity.Sku;
 import com.example.onlinemall.service.OrderService;
 import com.example.onlinemall.utils.IDGenerator;
+import com.example.onlinemall.utils.UserHolder;
 import com.example.onlinemall.workflow.OrderCheckoutWorkflow;
 import io.temporal.api.enums.v1.WorkflowIdConflictPolicy;
 import io.temporal.client.UpdateOptions;
 import io.temporal.client.WithStartWorkflowOperation;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
-import io.temporal.client.WorkflowUpdateException;
 import io.temporal.client.WorkflowUpdateStage;
-import io.temporal.failure.ApplicationFailure;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.example.onlinemall.constant.RedisConstant.ORDER_ID_KEY;
 
@@ -35,7 +40,10 @@ public class OrderServiceImpl implements OrderService {
     private OrderDao orderDao;
 
     @Autowired
-    private BasketDao cartDao;
+    private CartItemDao cartItemDao;
+
+    @Autowired
+    private SkuDao skuDao;
 
     @Autowired
     private IDGenerator idGenerator;
@@ -74,6 +82,34 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     public ResponseTemplate<?> checkout(CheckoutRequestDTO request) {
+
+        if (request == null || !StringUtils.hasText(request.getIdempotence())) {
+            throw new IllegalArgumentException("idempotence is required");
+        }
+
+        Long customerId = UserHolder.getUser().getId();
+        List<CartItem> cartItems = cartItemDao.selectByCustomerId(customerId);
+        if (CollectionUtils.isEmpty(cartItems)) {
+            return ResponseTemplate.fail("cart is empty");
+        }
+
+        Map<Long, List<CartItem>> shopMap = cartItems.stream()
+                .collect(Collectors.groupingBy(CartItem::getShopId));
+
+        List<Shop> shops = new ArrayList<>();
+        for (Map.Entry<Long, List<CartItem>> entry : shopMap.entrySet()) {
+            List<ProductItem> productItems = entry.getValue().stream()
+                    .map(this::toProductItem)
+                    .collect(Collectors.toList());
+            shops.add(Shop.builder()
+                    .shopId(entry.getKey())
+                    .productItemList(productItems)
+                    .build());
+        }
+
+        request.setCustomerId(customerId);
+        request.setItems(shops);
+
         long l = idGenerator.nextId(ORDER_ID_KEY);
         request.setOrderId(l);
         String idempotence = request.getIdempotence();
@@ -134,6 +170,19 @@ public class OrderServiceImpl implements OrderService {
                 "order-" + callback.getOrderId()
         );
         workflow.paymentCompleted(callback);
+    }
+
+    private ProductItem toProductItem(CartItem cartItem) {
+        Sku sku = skuDao.selectById(cartItem.getSkuId());
+        if (sku == null) {
+            throw new IllegalArgumentException("sku not found, skuId=" + cartItem.getSkuId());
+        }
+        return ProductItem.builder()
+                .skuId(cartItem.getSkuId())
+                .prodId(cartItem.getProdId())
+                .quantity(cartItem.getProdCount())
+                .unitPrice(sku.getCurrentPrice())
+                .build();
     }
 }
 
