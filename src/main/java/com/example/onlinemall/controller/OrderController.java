@@ -50,11 +50,7 @@ public class OrderController {
      */
     @PostMapping("/payment/callback")
     public ResponseTemplate<Void> paymentCallback(@RequestBody PaymentCallback callback) {
-        try {
-            orderService.handlePaymentCallback(callback);
-            return ResponseTemplate.success();
-        } catch (IllegalArgumentException e) {
-            return ResponseTemplate.fail(e.getMessage());
-        }
+        orderService.handlePaymentCallback(callback);
+        return ResponseTemplate.success();
     }
 }
